@@ -1,101 +1,247 @@
-import Image from "next/image";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { TrendingUp } from "lucide-react"
+import PostCard from "@/components/post-card"
 
-export default function Home() {
+export default function FeedPage() {
+  const posts = [
+    {
+      id: 1,
+      user: {
+        name: "John Doe",
+        username: "johndoe",
+        avatar: "/placeholder.svg?height=40&width=40",
+        profit: 24.8,
+      },
+      content:
+        "Just analyzed $AAPL earnings report. Strong growth in services, but hardware sales slightly below expectations. Still bullish long-term.",
+      tickers: ["AAPL"],
+      stocksInfo: [{ ticker: "AAPL", name: "Apple Inc.", change: 2.4 }],
+      hashtags: ["earnings", "tech"],
+      image: "chart",
+      time: "2h ago",
+      stats: {
+        likes: 24,
+        comments: 5,
+        reposts: 3,
+      },
+    },
+    {
+      id: 2,
+      user: {
+        name: "Sarah Smith",
+        username: "sarahsmith",
+        avatar: "/placeholder.svg?height=40&width=40",
+        profit: 12.3,
+      },
+      content: "My portfolio is up 12% this quarter! Key winners: $TSLA, $NVDA, $MSFT. What are your best performers?",
+      tickers: ["TSLA", "NVDA", "MSFT"],
+      stocksInfo: [
+        { ticker: "TSLA", name: "Tesla Inc.", change: -1.2 },
+        { ticker: "NVDA", name: "NVIDIA Corp.", change: 3.5 },
+        { ticker: "MSFT", name: "Microsoft Corp.", change: 1.8 },
+      ],
+      hashtags: ["investing", "stocks"],
+      time: "5h ago",
+      stats: {
+        likes: 42,
+        comments: 12,
+        reposts: 7,
+      },
+    },
+    {
+      id: 3,
+      user: {
+        name: "Mark Johnson",
+        username: "markjohnson",
+        avatar: "/placeholder.svg?height=40&width=40",
+        profit: -3.5,
+      },
+      content:
+        "Market volatility is increasing. I'm moving 20% of my portfolio to defensive stocks. Anyone else repositioning?",
+      tickers: ["VIX", "SPY"],
+      stocksInfo: [
+        { ticker: "VIX", name: "Volatility Index", change: 5.2 },
+        { ticker: "SPY", name: "S&P 500 ETF", change: -0.8 },
+      ],
+      hashtags: ["marketvolatility", "investing"],
+      time: "1d ago",
+      stats: {
+        likes: 18,
+        comments: 9,
+        reposts: 2,
+      },
+    },
+  ]
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="container px-4 py-6 md:px-6">
+      <div className="mb-4 flex items-center">
+        <h1 className="text-2xl font-bold">Feed</h1>
+      </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      <div className="grid gap-6 md:grid-cols-[1fr_300px]">
+        <div>
+          <Tabs defaultValue="foryou" className="w-full">
+            <div className="sticky top-0 z-10 bg-background pt-1 pb-3">
+              <TabsList className="w-full bg-gray-800">
+                <TabsTrigger value="foryou" className="flex-1 data-[state=active]:bg-gray-700">
+                  For You
+                </TabsTrigger>
+                <TabsTrigger value="following" className="flex-1 data-[state=active]:bg-gray-700">
+                  Following
+                </TabsTrigger>
+                <TabsTrigger value="latest" className="flex-1 data-[state=active]:bg-gray-700">
+                  Latest
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            <TabsContent value="foryou" className="space-y-4">
+              {posts.map((post) => (
+                <PostCard key={post.id} {...post} />
+              ))}
+            </TabsContent>
+            <TabsContent value="following" className="space-y-4">
+              <Card className="border-gray-700 bg-gray-800">
+                <CardHeader>
+                  <CardTitle>Follow more users</CardTitle>
+                  <CardDescription>Content from users you follow will appear here</CardDescription>
+                </CardHeader>
+              </Card>
+            </TabsContent>
+            <TabsContent value="latest" className="space-y-4">
+              <Card className="border-gray-700 bg-gray-800">
+                <CardHeader>
+                  <CardTitle>Latest content will appear here</CardTitle>
+                  <CardDescription>Most recent posts from across the platform</CardDescription>
+                </CardHeader>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        <div className="hidden md:block">
+          <div className="sticky top-6 space-y-4">
+            <Card className="border-gray-700 bg-gray-800">
+              <CardHeader>
+                <CardTitle>Trading Stocks</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="border-gray-700 bg-gray-800">
+                      $AAPL
+                    </Badge>
+                    <span>Apple Inc.</span>
+                  </div>
+                  <div className="flex items-center text-green-500">
+                    <TrendingUp className="h-4 w-4 mr-1" />
+                    <span>2.4%</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="border-gray-700 bg-gray-800">
+                      $TSLA
+                    </Badge>
+                    <span>Tesla Inc.</span>
+                  </div>
+                  <div className="flex items-center text-red-500">
+                    <TrendingUp className="h-4 w-4 mr-1" />
+                    <span>-1.2%</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="border-gray-700 bg-gray-800">
+                      $MSFT
+                    </Badge>
+                    <span>Microsoft Corp.</span>
+                  </div>
+                  <div className="flex items-center text-green-500">
+                    <TrendingUp className="h-4 w-4 mr-1" />
+                    <span>1.8%</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="border-gray-700 bg-gray-800">
+                      $NVDA
+                    </Badge>
+                    <span>NVIDIA Corp.</span>
+                  </div>
+                  <div className="flex items-center text-green-500">
+                    <TrendingUp className="h-4 w-4 mr-1" />
+                    <span>3.5%</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="border-gray-700 bg-gray-800">
+                      $AMZN
+                    </Badge>
+                    <span>Amazon.com Inc.</span>
+                  </div>
+                  <div className="flex items-center text-green-500">
+                    <TrendingUp className="h-4 w-4 mr-1" />
+                    <span>0.9%</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-gray-700 bg-gray-800">
+              <CardHeader>
+                <CardTitle>Trending Topics</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="text-primary hover:text-primary/80 cursor-pointer">#earnings</div>
+                  <div className="text-primary hover:text-primary/80 cursor-pointer">#tech</div>
+                  <div className="text-primary hover:text-primary/80 cursor-pointer">#investing</div>
+                  <div className="text-primary hover:text-primary/80 cursor-pointer">#stocks</div>
+                  <div className="text-primary hover:text-primary/80 cursor-pointer">#markettrends</div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-gray-700 bg-gray-800">
+              <CardHeader>
+                <CardTitle>Who to Follow</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-full bg-gray-700 flex items-center justify-center">MJ</div>
+                    <div>
+                      <p className="font-medium">Mark Johnson</p>
+                      <p className="text-xs text-gray-400">@markjohnson</p>
+                    </div>
+                  </div>
+                  <Button size="sm" variant="outline">
+                    Follow
+                  </Button>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-full bg-gray-700 flex items-center justify-center">EW</div>
+                    <div>
+                      <p className="font-medium">Emily Wilson</p>
+                      <p className="text-xs text-gray-400">@emilywilson</p>
+                    </div>
+                  </div>
+                  <Button size="sm" variant="outline">
+                    Follow
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
     </div>
-  );
+  )
 }
+
