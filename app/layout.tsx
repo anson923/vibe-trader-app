@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import LeftNavigation from "@/components/left-navigation"
 import MobileNavigation from "@/components/mobile-navigation"
 import CreatePostButton from "@/components/create-post-button"
+import { AuthProvider } from "@/lib/context/auth-context"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -22,14 +23,16 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className="dark">
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
-          <div className="flex min-h-screen bg-background text-foreground">
-            <LeftNavigation />
-            <main className="flex-1 md:ml-64">
-              <div className="min-h-screen pb-16 md:pb-0">{children}</div>
-            </main>
-            <MobileNavigation />
-            <CreatePostButton />
-          </div>
+          <AuthProvider>
+            <div className="flex min-h-screen bg-background text-foreground">
+              <LeftNavigation />
+              <main className="flex-1 md:ml-64">
+                <div className="min-h-screen pb-16 md:pb-0">{children}</div>
+              </main>
+              <MobileNavigation />
+              <CreatePostButton />
+            </div>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -1,0 +1,11 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+Make sure after coding and concluding the changed code, Add a documentation md file in folder "Prompt_Changelog" and name the file.
+Make sure the md file header is always my prompt message so that i can track what changed after my prompt.
+If i need to do something, write that in to document so that ill understand what steps i need to do next.

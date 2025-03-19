@@ -4,11 +4,13 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Home, TrendingUp, Search, Bell, Bookmark, Settings } from "lucide-react"
+import { Home, TrendingUp, Search, Bell, Bookmark, Settings, LogIn } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/lib/context/auth-context"
 
 export default function LeftNavigation() {
   const pathname = usePathname()
+  const { user, signOut, isLoading } = useAuth()
 
   const navItems = [
     { name: "Feed", href: "/", icon: Home },
@@ -48,33 +50,46 @@ export default function LeftNavigation() {
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 border-t border-gray-700 p-4">
-        <div className="flex items-center justify-between">
-          <Link
-            href="/profile"
-            className="flex items-center gap-2 rounded-md py-2 px-3 hover:bg-gray-700 transition-colors"
-          >
-            <Avatar className="h-8 w-8">
-              <AvatarImage src="/placeholder.svg?height=32&width=32" alt="@user" />
-              <AvatarFallback className="bg-gray-600">JD</AvatarFallback>
-            </Avatar>
-            <span className="text-sm font-medium">John Doe</span>
-          </Link>
+        {!isLoading && (
+          <div className="flex items-center justify-between">
+            {user ? (
+              <>
+                <Link
+                  href="/profile"
+                  className="flex items-center gap-2 rounded-md py-2 px-3 hover:bg-gray-700 transition-colors"
+                >
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src="/placeholder.svg?height=32&width=32" alt={user.user_metadata?.username || "@user"} />
+                    <AvatarFallback className="bg-gray-600">
+                      {user.user_metadata?.username ? user.user_metadata.username.substring(0, 2).toUpperCase() : "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium">{user.user_metadata?.username || "User"}</span>
+                </Link>
 
-          <div className="flex space-x-1">
-            <Link href="/notifications">
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <Bell className="h-5 w-5" />
-                <span className="sr-only">Notifications</span>
-              </Button>
-            </Link>
-            <Link href="/settings">
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <Settings className="h-5 w-5" />
-                <span className="sr-only">Settings</span>
-              </Button>
-            </Link>
+                <div className="flex space-x-1">
+                  <Link href="/notifications">
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Bell className="h-5 w-5" />
+                      <span className="sr-only">Notifications</span>
+                    </Button>
+                  </Link>
+                  <Link href="/settings">
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Settings className="h-5 w-5" />
+                      <span className="sr-only">Settings</span>
+                    </Button>
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <Link href="/login" className="flex w-full items-center gap-2 rounded-md bg-primary py-2 px-4 text-primary-foreground hover:bg-primary/90 justify-center">
+                <LogIn className="h-5 w-5 mr-2" />
+                <span>Login / Sign Up</span>
+              </Link>
+            )}
           </div>
-        </div>
+        )}
       </div>
     </aside>
   )

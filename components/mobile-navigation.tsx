@@ -3,13 +3,15 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Home, Search, TrendingUp, Bookmark, Bell, Settings } from "lucide-react"
+import { Home, Search, TrendingUp, Bookmark, Bell, Settings, LogIn } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { useAuth } from "@/lib/context/auth-context"
 
 export default function MobileNavigation() {
   const pathname = usePathname()
+  const { user, signOut, isLoading } = useAuth()
 
   const navItems = [
     { name: "Feed", href: "/", icon: Home },
@@ -39,51 +41,74 @@ export default function MobileNavigation() {
           )
         })}
 
-        <Sheet>
-          <SheetTrigger asChild>
-            <button className="flex flex-col items-center justify-center rounded-md px-3 py-1 text-muted-foreground hover:text-foreground">
-              <Avatar className="h-6 w-6">
-                <AvatarImage src="/placeholder.svg?height=24&width=24" alt="@user" />
-                <AvatarFallback className="bg-gray-600">JD</AvatarFallback>
-              </Avatar>
-              <span className="mt-1 text-xs">Profile</span>
-            </button>
-          </SheetTrigger>
-          <SheetContent side="bottom" className="h-auto rounded-t-xl bg-gray-800 border-t border-gray-700">
-            <div className="flex flex-col space-y-4 py-4">
-              <div className="flex items-center justify-between">
-                <Link
-                  href="/profile"
-                  className="flex items-center gap-2 rounded-md py-2 px-3 hover:bg-gray-700 transition-colors"
-                >
-                  <Avatar className="h-10 w-10">
-                    <AvatarImage src="/placeholder.svg?height=40&width=40" alt="@user" />
-                    <AvatarFallback className="bg-gray-600">JD</AvatarFallback>
+        {!isLoading && (
+          user ? (
+            <Sheet>
+              <SheetTrigger asChild>
+                <button className="flex flex-col items-center justify-center rounded-md px-3 py-1 text-muted-foreground hover:text-foreground">
+                  <Avatar className="h-6 w-6">
+                    <AvatarImage src="/placeholder.svg?height=24&width=24" alt={user.user_metadata?.username || "@user"} />
+                    <AvatarFallback className="bg-gray-600">
+                      {user.user_metadata?.username ? user.user_metadata.username.substring(0, 2).toUpperCase() : "U"}
+                    </AvatarFallback>
                   </Avatar>
-                  <div>
-                    <p className="font-medium">John Doe</p>
-                    <p className="text-xs text-gray-400">@johndoe</p>
-                  </div>
-                </Link>
+                  <span className="mt-1 text-xs">Profile</span>
+                </button>
+              </SheetTrigger>
+              <SheetContent side="bottom" className="h-auto rounded-t-xl bg-gray-800 border-t border-gray-700">
+                <div className="flex flex-col space-y-4 py-4">
+                  <div className="flex items-center justify-between">
+                    <Link
+                      href="/profile"
+                      className="flex items-center gap-2 rounded-md py-2 px-3 hover:bg-gray-700 transition-colors"
+                    >
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src="/placeholder.svg?height=40&width=40" alt={user.user_metadata?.username || "@user"} />
+                        <AvatarFallback className="bg-gray-600">
+                          {user.user_metadata?.username ? user.user_metadata.username.substring(0, 2).toUpperCase() : "U"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">{user.user_metadata?.username || "User"}</p>
+                        <p className="text-xs text-gray-400">@{user.user_metadata?.username || "user"}</p>
+                      </div>
+                    </Link>
 
-                <div className="flex space-x-2">
-                  <Link href="/notifications">
-                    <Button variant="ghost" size="icon">
-                      <Bell className="h-5 w-5" />
-                      <span className="sr-only">Notifications</span>
-                    </Button>
-                  </Link>
-                  <Link href="/settings">
-                    <Button variant="ghost" size="icon">
-                      <Settings className="h-5 w-5" />
-                      <span className="sr-only">Settings</span>
-                    </Button>
-                  </Link>
+                    <div className="flex space-x-2">
+                      <Link href="/notifications">
+                        <Button variant="ghost" size="icon">
+                          <Bell className="h-5 w-5" />
+                          <span className="sr-only">Notifications</span>
+                        </Button>
+                      </Link>
+                      <Link href="/settings">
+                        <Button variant="ghost" size="icon">
+                          <Settings className="h-5 w-5" />
+                          <span className="sr-only">Settings</span>
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => signOut()}
+                  >
+                    Sign Out
+                  </Button>
                 </div>
-              </div>
-            </div>
-          </SheetContent>
-        </Sheet>
+              </SheetContent>
+            </Sheet>
+          ) : (
+            <Link
+              href="/login"
+              className="flex flex-col items-center justify-center rounded-md px-3 py-1 text-muted-foreground hover:text-foreground"
+            >
+              <LogIn className="h-6 w-6" />
+              <span className="mt-1 text-xs">Login</span>
+            </Link>
+          )
+        )}
       </div>
     </div>
   )
