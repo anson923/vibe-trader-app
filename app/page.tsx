@@ -1,80 +1,123 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { TrendingUp } from "lucide-react"
 import PostCard from "@/components/post-card"
+import { supabase } from "@/lib/supabase"
+
+// Post type definition
+interface Post {
+  id: number
+  user_id: string
+  content: string
+  username: string
+  avatar_url: string
+  created_at: string
+  likes_count: number
+  comments_count: number
+}
+
+// Formatted post for PostCard component
+interface FormattedPost {
+  id: number
+  user: {
+    name: string
+    username: string
+    avatar: string
+    profit: number
+  }
+  content: string
+  time: string
+  stats: {
+    likes: number
+    comments: number
+    reposts: number
+  }
+}
 
 export default function FeedPage() {
-  const posts = [
-    {
-      id: 1,
-      user: {
-        name: "John Doe",
-        username: "johndoe",
-        avatar: "/placeholder.svg?height=40&width=40",
-        profit: 24.8,
-      },
-      content:
-        "Just analyzed $AAPL earnings report. Strong growth in services, but hardware sales slightly below expectations. Still bullish long-term.",
-      tickers: ["AAPL"],
-      stocksInfo: [{ ticker: "AAPL", name: "Apple Inc.", change: 2.4 }],
-      hashtags: ["earnings", "tech"],
-      image: "chart",
-      time: "2h ago",
-      stats: {
-        likes: 24,
-        comments: 5,
-        reposts: 3,
-      },
-    },
-    {
-      id: 2,
-      user: {
-        name: "Sarah Smith",
-        username: "sarahsmith",
-        avatar: "/placeholder.svg?height=40&width=40",
-        profit: 12.3,
-      },
-      content: "My portfolio is up 12% this quarter! Key winners: $TSLA, $NVDA, $MSFT. What are your best performers?",
-      tickers: ["TSLA", "NVDA", "MSFT"],
-      stocksInfo: [
-        { ticker: "TSLA", name: "Tesla Inc.", change: -1.2 },
-        { ticker: "NVDA", name: "NVIDIA Corp.", change: 3.5 },
-        { ticker: "MSFT", name: "Microsoft Corp.", change: 1.8 },
-      ],
-      hashtags: ["investing", "stocks"],
-      time: "5h ago",
-      stats: {
-        likes: 42,
-        comments: 12,
-        reposts: 7,
-      },
-    },
-    {
-      id: 3,
-      user: {
-        name: "Mark Johnson",
-        username: "markjohnson",
-        avatar: "/placeholder.svg?height=40&width=40",
-        profit: -3.5,
-      },
-      content:
-        "Market volatility is increasing. I'm moving 20% of my portfolio to defensive stocks. Anyone else repositioning?",
-      tickers: ["VIX", "SPY"],
-      stocksInfo: [
-        { ticker: "VIX", name: "Volatility Index", change: 5.2 },
-        { ticker: "SPY", name: "S&P 500 ETF", change: -0.8 },
-      ],
-      hashtags: ["marketvolatility", "investing"],
-      time: "1d ago",
-      stats: {
-        likes: 18,
-        comments: 9,
-        reposts: 2,
-      },
-    },
-  ]
+  const [posts, setPosts] = useState<FormattedPost[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchPosts() {
+      try {
+        // Get posts from Supabase, ordered by most recent
+        const { data, error } = await supabase
+          .from('posts')
+          .select('*')
+          .order('created_at', { ascending: false })
+
+        if (error) {
+          throw error
+        }
+
+        if (data) {
+          // Format posts for the PostCard component
+          const formattedPosts = data.map((post: Post): FormattedPost => ({
+            id: post.id,
+            user: {
+              name: post.username,
+              username: post.username.toLowerCase().replace(/\s+/g, ''),
+              avatar: post.avatar_url || "/placeholder.svg?height=40&width=40",
+              profit: 0, // Default value since profit isn't in our posts table
+            },
+            content: post.content,
+            time: formatTimeAgo(new Date(post.created_at)),
+            stats: {
+              likes: post.likes_count || 0,
+              comments: post.comments_count || 0,
+              reposts: 0,
+            },
+          }))
+
+          setPosts(formattedPosts)
+        }
+      } catch (error) {
+        console.error("Error fetching posts:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchPosts()
+  }, [])
+
+  // Helper function to format time ago
+  function formatTimeAgo(date: Date): string {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000)
+
+    let interval = seconds / 31536000
+    if (interval > 1) {
+      return Math.floor(interval) + "y ago"
+    }
+
+    interval = seconds / 2592000
+    if (interval > 1) {
+      return Math.floor(interval) + "mo ago"
+    }
+
+    interval = seconds / 86400
+    if (interval > 1) {
+      return Math.floor(interval) + "d ago"
+    }
+
+    interval = seconds / 3600
+    if (interval > 1) {
+      return Math.floor(interval) + "h ago"
+    }
+
+    interval = seconds / 60
+    if (interval > 1) {
+      return Math.floor(interval) + "m ago"
+    }
+
+    return Math.floor(seconds) + "s ago"
+  }
 
   return (
     <div className="container px-4 py-6 md:px-6">
@@ -84,38 +127,40 @@ export default function FeedPage() {
 
       <div className="grid gap-6 md:grid-cols-[1fr_300px]">
         <div>
-          <Tabs defaultValue="foryou" className="w-full">
+          <Tabs defaultValue="latest" className="w-full">
             <div className="sticky top-0 z-10 bg-background pt-1 pb-3">
               <TabsList className="w-full bg-gray-800">
-                <TabsTrigger value="foryou" className="flex-1 data-[state=active]:bg-gray-700">
-                  For You
+                <TabsTrigger value="latest" className="flex-1 data-[state=active]:bg-gray-700">
+                  Latest
                 </TabsTrigger>
                 <TabsTrigger value="following" className="flex-1 data-[state=active]:bg-gray-700">
                   Following
                 </TabsTrigger>
-                <TabsTrigger value="latest" className="flex-1 data-[state=active]:bg-gray-700">
-                  Latest
-                </TabsTrigger>
               </TabsList>
             </div>
-            <TabsContent value="foryou" className="space-y-4">
-              {posts.map((post) => (
-                <PostCard key={post.id} {...post} />
-              ))}
+            <TabsContent value="latest" className="space-y-4">
+              {loading ? (
+                <div className="flex justify-center py-10">
+                  <div className="animate-pulse text-gray-400">Loading posts...</div>
+                </div>
+              ) : posts.length > 0 ? (
+                posts.map((post) => (
+                  <PostCard key={post.id} {...post} />
+                ))
+              ) : (
+                <Card className="border-gray-700 bg-gray-800">
+                  <CardHeader>
+                    <CardTitle>No posts yet</CardTitle>
+                    <CardDescription>Be the first to share your thoughts!</CardDescription>
+                  </CardHeader>
+                </Card>
+              )}
             </TabsContent>
             <TabsContent value="following" className="space-y-4">
               <Card className="border-gray-700 bg-gray-800">
                 <CardHeader>
                   <CardTitle>Follow more users</CardTitle>
                   <CardDescription>Content from users you follow will appear here</CardDescription>
-                </CardHeader>
-              </Card>
-            </TabsContent>
-            <TabsContent value="latest" className="space-y-4">
-              <Card className="border-gray-700 bg-gray-800">
-                <CardHeader>
-                  <CardTitle>Latest content will appear here</CardTitle>
-                  <CardDescription>Most recent posts from across the platform</CardDescription>
                 </CardHeader>
               </Card>
             </TabsContent>

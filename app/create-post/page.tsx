@@ -4,24 +4,58 @@ import type React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
-import { BarChart2, Image, Link2 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/context/auth-context"
+import { supabase } from "@/lib/supabase"
 
 export default function CreatePostPage() {
   const router = useRouter()
+  const { user } = useAuth()
   const [content, setContent] = useState("")
-  const [tickers, setTickers] = useState("")
-  const [hashtags, setHashtags] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle post creation logic here
-    console.log("Creating post with:", { content, tickers, hashtags })
-    router.push("/dashboard")
+
+    if (!user) {
+      router.push("/login")
+      return
+    }
+
+    if (!content.trim()) {
+      return
+    }
+
+    setIsSubmitting(true)
+
+    try {
+      // Save post to Supabase
+      const { data, error } = await supabase
+        .from('posts')
+        .insert([
+          {
+            content: content.trim(),
+            user_id: user.id,
+            username: user.user_metadata?.username || "Anonymous",
+            avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg?height=40&width=40"
+          }
+        ])
+        .select()
+
+      if (error) {
+        console.error("Error creating post:", error)
+        throw error
+      }
+
+      // Redirect to home page after successful post
+      router.push("/")
+    } catch (error) {
+      console.error("Failed to create post:", error)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -32,8 +66,8 @@ export default function CreatePostPage() {
           <form onSubmit={handleSubmit}>
             <CardHeader className="flex flex-row items-center gap-4 p-4">
               <Avatar>
-                <AvatarImage src="/placeholder.svg?height=40&width=40" alt="@user" />
-                <AvatarFallback>U</AvatarFallback>
+                <AvatarImage src={user?.user_metadata?.avatar_url || "/placeholder.svg?height=40&width=40"} alt="@user" />
+                <AvatarFallback>{user?.user_metadata?.username?.substring(0, 2).toUpperCase() || "U"}</AvatarFallback>
               </Avatar>
               <CardTitle className="text-base">Share your insights</CardTitle>
             </CardHeader>
@@ -44,50 +78,17 @@ export default function CreatePostPage() {
                   className="min-h-32 bg-gray-700/30 border-gray-600"
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
+                  required
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tickers">Stock Tickers</Label>
-                <Input
-                  id="tickers"
-                  placeholder="$AAPL, $MSFT, $TSLA"
-                  value={tickers}
-                  onChange={(e) => setTickers(e.target.value)}
-                  className="bg-gray-700/30 border-gray-600"
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400">Separate multiple tickers with commas</p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="hashtags">Hashtags</Label>
-                <Input
-                  id="hashtags"
-                  placeholder="#investing, #stocks, #earnings"
-                  value={hashtags}
-                  onChange={(e) => setHashtags(e.target.value)}
-                  className="bg-gray-700/30 border-gray-600"
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400">Separate multiple hashtags with commas</p>
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button type="button" variant="outline" size="sm" className="gap-1">
-                  <Image className="h-4 w-4" />
-                  <span>Add Image</span>
-                </Button>
-                <Button type="button" variant="outline" size="sm" className="gap-1">
-                  <BarChart2 className="h-4 w-4" />
-                  <span>Add Chart</span>
-                </Button>
-                <Button type="button" variant="outline" size="sm" className="gap-1">
-                  <Link2 className="h-4 w-4" />
-                  <span>Add Link</span>
-                </Button>
               </div>
             </CardContent>
             <CardFooter className="flex justify-between p-4">
               <Button type="button" variant="ghost" onClick={() => router.back()}>
                 Cancel
               </Button>
-              <Button type="submit">Post</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Posting..." : "Post"}
+              </Button>
             </CardFooter>
           </form>
         </Card>

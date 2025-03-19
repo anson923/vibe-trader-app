@@ -1,19 +1,15 @@
 "use client"
 
 import type React from "react"
+import { useState, useEffect } from "react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
-import { MessageSquare, Heart, Share2, Bookmark, Repeat2, TrendingUp } from "lucide-react"
+import { MessageSquare, Heart, Share2, Bookmark, Repeat2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
-
-interface StockInfo {
-  ticker: string
-  name: string
-  change: number
-}
+import { useAuth } from "@/lib/context/auth-context"
+import { supabase } from "@/lib/supabase"
 
 interface PostCardProps {
   id: number
@@ -24,10 +20,6 @@ interface PostCardProps {
     profit: number
   }
   content: string
-  tickers?: string[]
-  stocksInfo?: StockInfo[]
-  hashtags?: string[]
-  image?: string
   time: string
   stats: {
     likes: number
@@ -40,49 +32,95 @@ export default function PostCard({
   id,
   user,
   content,
-  tickers = [],
-  stocksInfo = [],
-  hashtags = [],
-  image,
   time,
   stats,
 }: PostCardProps) {
   const router = useRouter()
+  const { user: currentUser } = useAuth()
+  const [liked, setLiked] = useState(false)
+  const [likesCount, setLikesCount] = useState(stats.likes)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const profitColor = user.profit >= 0 ? "text-green-500" : "text-red-500"
   const profitSign = user.profit >= 0 ? "+" : ""
 
-  // Process content to highlight tickers and hashtags without using Link components
-  const processedContent = content.split(" ").map((word, index) => {
-    if (word.startsWith("$") && tickers.includes(word.substring(1))) {
-      return (
-        <span
-          key={index}
-          className="text-primary font-medium cursor-pointer"
-          onClick={(e) => {
-            e.stopPropagation() // Prevent the parent click from firing
-            router.push(`/stock/${word.substring(1)}`)
-          }}
-        >
-          {word}{" "}
-        </span>
-      )
-    } else if (word.startsWith("#") && hashtags.includes(word.substring(1))) {
-      return (
-        <span key={index} className="text-primary font-medium">
-          {word}{" "}
-        </span>
-      )
+  // Check if the current user has liked this post
+  useEffect(() => {
+    async function checkIfLiked() {
+      if (!currentUser) return
+
+      try {
+        const { data, error } = await supabase
+          .from('likes')
+          .select('id')
+          .eq('post_id', id)
+          .eq('user_id', currentUser.id)
+          .maybeSingle()
+
+        if (error) {
+          throw error
+        }
+
+        setLiked(!!data)
+      } catch (error) {
+        console.error('Error checking like status:', error)
+      }
     }
-    return <span key={index}>{word} </span>
-  })
+
+    checkIfLiked()
+  }, [id, currentUser])
+
+  const handleLike = async (e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent the card click from firing
+
+    if (!currentUser) {
+      router.push('/login')
+      return
+    }
+
+    if (isSubmitting) return
+
+    setIsSubmitting(true)
+
+    try {
+      if (liked) {
+        // Unlike the post
+        const { error } = await supabase
+          .from('likes')
+          .delete()
+          .eq('post_id', id)
+          .eq('user_id', currentUser.id)
+
+        if (error) {
+          throw error
+        }
+
+        setLiked(false)
+        setLikesCount(prev => Math.max(0, prev - 1))
+      } else {
+        // Like the post
+        const { error } = await supabase
+          .from('likes')
+          .insert({
+            post_id: id,
+            user_id: currentUser.id
+          })
+
+        if (error) {
+          throw error
+        }
+
+        setLiked(true)
+        setLikesCount(prev => prev + 1)
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   const handleCardClick = () => {
     router.push(`/post/${id}`)
-  }
-
-  const handleStockClick = (e: React.MouseEvent, ticker: string) => {
-    e.stopPropagation() // Prevent the card click from firing
-    router.push(`/stock/${ticker}`)
   }
 
   return (
@@ -98,10 +136,12 @@ export default function PostCard({
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <p className="font-medium">{user.name}</p>
-            <span className={cn("text-sm font-medium", profitColor)}>
-              {profitSign}
-              {user.profit}%
-            </span>
+            {user.profit !== 0 && (
+              <span className={`text-sm font-medium ${profitColor}`}>
+                {profitSign}
+                {user.profit}%
+              </span>
+            )}
           </div>
           <p className="text-sm text-gray-400">
             @{user.username} • {time}
@@ -109,51 +149,18 @@ export default function PostCard({
         </div>
       </CardHeader>
       <CardContent className="p-4 pt-0">
-        <p className="mb-3">{processedContent}</p>
-
-        {stocksInfo.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-3">
-            {stocksInfo.map((stock) => (
-              <div
-                key={stock.ticker}
-                onClick={(e) => handleStockClick(e, stock.ticker)}
-                className="flex items-center gap-2 px-3 py-1 rounded-full bg-gray-700/50 hover:bg-gray-600/60 transition-colors cursor-pointer border border-gray-600/50"
-              >
-                <span className="font-medium">${stock.ticker}</span>
-                <span className="text-sm">{stock.name}</span>
-                <span className={stock.change >= 0 ? "text-green-500" : "text-red-500"}>
-                  {stock.change >= 0 ? (
-                    <span className="flex items-center">
-                      <TrendingUp className="h-3 w-3 mr-1" />+{stock.change}%
-                    </span>
-                  ) : (
-                    <span className="flex items-center">
-                      <TrendingUp className="h-3 w-3 mr-1 rotate-180" />
-                      {stock.change}%
-                    </span>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {image && (
-          <div className="rounded-lg overflow-hidden bg-gray-800 mt-2">
-            <div className="h-40 bg-gradient-to-r from-gray-800 to-gray-700 flex items-center justify-center">
-              {image === "chart" ? (
-                <img src="/placeholder.svg?height=160&width=320" alt="Chart" className="w-full h-full object-cover" />
-              ) : (
-                <img src={image || "/placeholder.svg"} alt="Post attachment" className="w-full h-full object-cover" />
-              )}
-            </div>
-          </div>
-        )}
+        <p className="mb-3">{content}</p>
       </CardContent>
       <CardFooter className="flex justify-between p-4 pt-0">
-        <Button variant="ghost" size="sm" className="gap-1" onClick={(e) => e.stopPropagation()}>
-          <Heart className="h-4 w-4" />
-          <span>{stats.likes}</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={`gap-1 ${liked ? 'text-red-500' : ''}`}
+          onClick={handleLike}
+          disabled={isSubmitting}
+        >
+          <Heart className={`h-4 w-4 ${liked ? 'fill-current' : ''}`} />
+          <span>{likesCount}</span>
         </Button>
         <Button
           variant="ghost"
