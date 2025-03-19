@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/context/auth-context"
 import { supabase } from "@/lib/supabase"
+import { StockBadge } from "./stock-badge"
+import { getStockDataForPost } from "@/lib/stock-utils"
 
 interface PostCardProps {
   id: number
@@ -28,6 +30,15 @@ interface PostCardProps {
   }
 }
 
+interface StockData {
+  id: number
+  ticker: string
+  price: number
+  price_change_percentage: number
+  post_id: number
+  created_at: string
+}
+
 export default function PostCard({
   id,
   user,
@@ -40,8 +51,19 @@ export default function PostCard({
   const [liked, setLiked] = useState(false)
   const [likesCount, setLikesCount] = useState(stats.likes)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [stockData, setStockData] = useState<StockData[]>([])
   const profitColor = user.profit >= 0 ? "text-green-500" : "text-red-500"
   const profitSign = user.profit >= 0 ? "+" : ""
+
+  // Fetch stock data for this post
+  useEffect(() => {
+    async function fetchStockData() {
+      const data = await getStockDataForPost(id);
+      setStockData(data as StockData[]);
+    }
+
+    fetchStockData();
+  }, [id]);
 
   // Check if the current user has liked this post
   useEffect(() => {
@@ -150,6 +172,20 @@ export default function PostCard({
       </CardHeader>
       <CardContent className="p-4 pt-0">
         <p className="mb-3">{content}</p>
+
+        {/* Stock badges */}
+        {stockData.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2 mb-3">
+            {stockData.map(stock => (
+              <StockBadge
+                key={stock.id}
+                ticker={stock.ticker}
+                price={stock.price}
+                priceChangePercentage={stock.price_change_percentage}
+              />
+            ))}
+          </div>
+        )}
       </CardContent>
       <CardFooter className="flex justify-between p-4 pt-0">
         <Button

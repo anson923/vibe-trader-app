@@ -9,15 +9,20 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/context/auth-context"
 import { supabase } from "@/lib/supabase"
+import { extractStockTickers, fetchStockData, saveStockData } from "@/lib/stock-utils"
 
 export default function CreatePostPage() {
   const router = useRouter()
   const { user } = useAuth()
   const [content, setContent] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [processingStocks, setProcessingStocks] = useState(false)
+  const [currentProcessingTicker, setCurrentProcessingTicker] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
 
     if (!user) {
       router.push("/login")
@@ -46,16 +51,71 @@ export default function CreatePostPage() {
 
       if (error) {
         console.error("Error creating post:", error)
+        setError("Failed to create post. Please try again.")
         throw error
+      }
+
+      // Process stock tickers if present
+      const postId = data[0].id
+      const tickers = extractStockTickers(content)
+
+      if (tickers.length > 0) {
+        setProcessingStocks(true)
+        try {
+          await processStockTickers(tickers, postId)
+          console.log("Successfully processed stock tickers:", tickers)
+        } catch (stockError) {
+          console.error("Error processing stock tickers:", stockError)
+          // Continue anyway since the post was created successfully
+        }
       }
 
       // Redirect to home page after successful post
       router.push("/")
     } catch (error) {
       console.error("Failed to create post:", error)
+      setError("Failed to create post. Please try again.")
     } finally {
       setIsSubmitting(false)
+      setProcessingStocks(false)
+      setCurrentProcessingTicker(null)
     }
+  }
+
+  const processStockTickers = async (tickers: string[], postId: number) => {
+    const results = [];
+    const errors = [];
+
+    //TODO: Add a check to see if the ticker is already in the database
+
+    // Process each ticker sequentially
+    for (const ticker of tickers) {
+      try {
+        setCurrentProcessingTicker(ticker);
+        console.log(`Processing ticker: ${ticker}`);
+
+        const stockData = await fetchStockData(ticker);
+
+        if (stockData) {
+          const savedData = await saveStockData(postId, stockData);
+          results.push({ ticker, savedData });
+          console.log(`Successfully processed ticker: ${ticker}`, stockData);
+        } else {
+          errors.push({ ticker, error: "Could not fetch stock data" });
+          console.error(`Failed to fetch data for ticker: ${ticker}`);
+        }
+      } catch (error) {
+        errors.push({ ticker, error });
+        console.error(`Error processing ticker ${ticker}:`, error);
+      }
+    }
+
+    if (errors.length > 0) {
+      console.warn(`Completed with ${errors.length} errors:`, errors);
+      throw new Error(`Failed to process ${errors.length} tickers`);
+    }
+
+    return results;
   }
 
   return (
@@ -74,21 +134,29 @@ export default function CreatePostPage() {
             <CardContent className="p-4 pt-0 space-y-4">
               <div className="space-y-2">
                 <Textarea
-                  placeholder="What's on your mind about the markets today?"
+                  placeholder="What's on your mind about the markets today? Use $TICKER to reference stocks (e.g. $AAPL)"
                   className="min-h-32 bg-gray-700/30 border-gray-600"
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   required
                 />
+                {error && (
+                  <p className="text-red-500 text-sm mt-2">{error}</p>
+                )}
               </div>
             </CardContent>
             <CardFooter className="flex justify-between p-4">
               <Button type="button" variant="ghost" onClick={() => router.back()}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Posting..." : "Post"}
-              </Button>
+              <div className="flex items-center gap-2">
+                {processingStocks && currentProcessingTicker && (
+                  <span className="text-xs text-gray-400">Processing ${currentProcessingTicker}...</span>
+                )}
+                <Button type="submit" disabled={isSubmitting || processingStocks}>
+                  {isSubmitting ? "Posting..." : processingStocks ? "Processing Stocks..." : "Post"}
+                </Button>
+              </div>
             </CardFooter>
           </form>
         </Card>
