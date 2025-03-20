@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/context/auth-context"
 import { supabase } from "@/lib/supabase"
-import { extractStockTickers, fetchStockData, saveStockData } from "@/lib/stock-utils"
+import { extractStockTickers, fetchMultipleStockData, saveStockData } from "@/lib/stock-utils"
 
 export default function CreatePostPage() {
   const router = useRouter()
@@ -83,31 +83,44 @@ export default function CreatePostPage() {
   }
 
   const processStockTickers = async (tickers: string[], postId: number) => {
+    if (tickers.length === 0) return [];
+
     const results = [];
     const errors = [];
 
-    //TODO: Add a check to see if the ticker is already in the database
+    try {
+      // Fetch all tickers in a single API call
+      const batchSize = 5; // Process in batches of 5 tickers
 
-    // Process each ticker sequentially
-    for (const ticker of tickers) {
-      try {
-        setCurrentProcessingTicker(ticker);
-        console.log(`Processing ticker: ${ticker}`);
+      for (let i = 0; i < tickers.length; i += batchSize) {
+        const tickerBatch = tickers.slice(i, i + batchSize);
+        setCurrentProcessingTicker(tickerBatch.join(", "));
 
-        const stockData = await fetchStockData(ticker);
+        console.log(`Processing tickers batch: ${tickerBatch.join(", ")}`);
 
-        if (stockData) {
-          const savedData = await saveStockData(postId, stockData);
-          results.push({ ticker, savedData });
-          console.log(`Successfully processed ticker: ${ticker}`, stockData);
-        } else {
-          errors.push({ ticker, error: "Could not fetch stock data" });
-          console.error(`Failed to fetch data for ticker: ${ticker}`);
+        // Fetch data for this batch of tickers
+        const stocksData = await fetchMultipleStockData(tickerBatch);
+
+        // Save each ticker's data to the database
+        for (const ticker of tickerBatch) {
+          try {
+            if (stocksData[ticker] && !stocksData[ticker].error) {
+              const savedData = await saveStockData(postId, stocksData[ticker]);
+              results.push({ ticker, savedData });
+              console.log(`Successfully processed ticker: ${ticker}`);
+            } else {
+              errors.push({ ticker, error: "Could not fetch stock data" });
+              console.error(`Failed to fetch data for ticker: ${ticker}`);
+            }
+          } catch (error) {
+            errors.push({ ticker, error });
+            console.error(`Error saving data for ticker ${ticker}:`, error);
+          }
         }
-      } catch (error) {
-        errors.push({ ticker, error });
-        console.error(`Error processing ticker ${ticker}:`, error);
       }
+    } catch (error) {
+      console.error(`Error in batch processing tickers:`, error);
+      errors.push({ error });
     }
 
     if (errors.length > 0) {
@@ -151,7 +164,7 @@ export default function CreatePostPage() {
               </Button>
               <div className="flex items-center gap-2">
                 {processingStocks && currentProcessingTicker && (
-                  <span className="text-xs text-gray-400">Processing ${currentProcessingTicker}...</span>
+                  <span className="text-xs text-gray-400">Processing: ${currentProcessingTicker}...</span>
                 )}
                 <Button type="submit" disabled={isSubmitting || processingStocks}>
                   {isSubmitting ? "Posting..." : processingStocks ? "Processing Stocks..." : "Post"}

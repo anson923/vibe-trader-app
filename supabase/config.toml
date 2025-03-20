@@ -1,0 +1,33 @@
+# This file configures Supabase CLI
+# Reference: https://supabase.com/docs/reference/cli/config
+
+project_id = "nzexydrexsmqgauopabf"
+
+[api]
+# Port for the API Gateway server
+port = 54321
+schemas = ["public", "storage", "auth"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+# Use remote database for migrations
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+# Port for the Studio server
+port = 54323
+api_url = "https://nzexydrexsmqgauopabf.supabase.co"
+
+# Email testing
+[inbucket]
+# Port for the email testing interface
+port = 54324
+smtp_port = 54325
+pop3_port = 54326
+
+[storage]
+# File storage config
+file_size_limit = "50MiB" 
