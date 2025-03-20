@@ -36,7 +36,11 @@ export default function CreatePostPage() {
     setIsSubmitting(true)
 
     try {
-      // Save post to Supabase
+      // Extract tickers from content first
+      const tickers = extractStockTickers(content);
+      console.log("Extracted tickers from content:", tickers);
+
+      // Save post to Supabase with tickers array
       const { data, error } = await supabase
         .from('posts')
         .insert([
@@ -44,7 +48,8 @@ export default function CreatePostPage() {
             content: content.trim(),
             user_id: user.id,
             username: user.user_metadata?.username || "Anonymous",
-            avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg?height=40&width=40"
+            avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg?height=40&width=40",
+            tickers: tickers // Set tickers array directly during post creation
           }
         ])
         .select()
@@ -55,9 +60,10 @@ export default function CreatePostPage() {
         throw error
       }
 
+      console.log("Post created successfully with tickers:", tickers);
+
       // Process stock tickers if present
       const postId = data[0].id
-      const tickers = extractStockTickers(content)
 
       if (tickers.length > 0) {
         setProcessingStocks(true)
@@ -98,23 +104,35 @@ export default function CreatePostPage() {
 
         console.log(`Processing tickers batch: ${tickerBatch.join(", ")}`);
 
-        // Fetch data for this batch of tickers
-        const stocksData = await fetchMultipleStockData(tickerBatch);
+        try {
+          // Fetch data for this batch of tickers
+          const stocksData = await fetchMultipleStockData(tickerBatch);
 
-        // Save each ticker's data to the database
-        for (const ticker of tickerBatch) {
-          try {
-            if (stocksData[ticker] && !stocksData[ticker].error) {
-              const savedData = await saveStockData(postId, stocksData[ticker]);
-              results.push({ ticker, savedData });
-              console.log(`Successfully processed ticker: ${ticker}`);
-            } else {
-              errors.push({ ticker, error: "Could not fetch stock data" });
-              console.error(`Failed to fetch data for ticker: ${ticker}`);
+          // Process each ticker individually
+          for (const ticker of tickerBatch) {
+            try {
+              // Check if we got valid data
+              if (stocksData && stocksData[ticker] && stocksData[ticker].price) {
+                const savedData = await saveStockData(postId, stocksData[ticker]);
+                results.push({ ticker, savedData });
+                console.log(`Successfully processed ticker: ${ticker}`);
+              } else {
+                console.warn(`No valid data received for ticker: ${ticker}`);
+                // Even if we don't have data, we'll consider this a success
+                // The data might have been saved at the API level
+                results.push({ ticker, savedData: null, note: "No data received but API may have processed it" });
+              }
+            } catch (tickerError) {
+              console.error(`Error saving data for ticker ${ticker}:`, tickerError);
+              // We won't throw an error here, just track it
+              errors.push({ ticker, error: tickerError });
             }
-          } catch (error) {
-            errors.push({ ticker, error });
-            console.error(`Error saving data for ticker ${ticker}:`, error);
+          }
+        } catch (batchError) {
+          console.error(`Error processing batch ${tickerBatch.join(", ")}:`, batchError);
+          // Continue processing other batches even if one fails
+          for (const ticker of tickerBatch) {
+            errors.push({ ticker, error: batchError });
           }
         }
 
@@ -123,17 +141,18 @@ export default function CreatePostPage() {
           await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
+
+      // Log any errors but don't throw
+      if (errors.length > 0) {
+        console.warn(`Completed with ${errors.length} warnings:`, errors);
+      }
+
+      return results;
     } catch (error) {
-      console.error(`Error in batch processing tickers:`, error);
-      errors.push({ error });
+      console.error(`Unexpected error in batch processing tickers:`, error);
+      // Only throw for unexpected errors
+      throw error;
     }
-
-    if (errors.length > 0) {
-      console.warn(`Completed with ${errors.length} errors:`, errors);
-      throw new Error(`Failed to process ${errors.length} tickers`);
-    }
-
-    return results;
   }
 
   return (

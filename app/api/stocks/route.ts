@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import * as puppeteer from 'puppeteer';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 // Define types for stock data
 interface StockData {
@@ -18,7 +19,7 @@ interface CacheEntry {
 
 // Create a cache to store fetched data
 const cache = new Map<string, CacheEntry>();
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes in milliseconds
 const MAX_TICKERS_PER_REQUEST = 5; // Maximum tickers per batch request
 
 // Maintain a single browser instance to improve performance
@@ -64,19 +65,8 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Ticker is required' }, { status: 400 });
     }
 
-    // Check if we have this ticker combination in cache
-    if (cache.has(ticker)) {
-        const cachedData = cache.get(ticker);
-        const now = Date.now();
-        // Use cached data if it's less than 5 minutes old
-        if (cachedData && now - cachedData.timestamp < CACHE_DURATION) {
-            console.log(`Using cached data for ${ticker}`);
-            return NextResponse.json(cachedData.data);
-        }
-    }
-
     try {
-        // Format URL for single or multiple tickers
+        // Normalize ticker input
         ticker = ticker.toUpperCase().trim();
         let tickers = ticker.split(',').filter(t => t.trim()).map(t => t.trim());
 
@@ -90,80 +80,65 @@ export async function GET(request: Request) {
         // Process tickers in batches to balance between performance and reliability
         const results: Record<string, StockData> = {};
 
-        // Process in batches of MAX_TICKERS_PER_REQUEST
-        for (let i = 0; i < tickers.length; i += MAX_TICKERS_PER_REQUEST) {
-            const tickerBatch = tickers.slice(i, i + MAX_TICKERS_PER_REQUEST);
-            const batchKey = tickerBatch.join(',');
-
-            console.log(`Processing ticker batch: ${batchKey}`);
-
-            // Check if we have this batch in cache
-            if (cache.has(batchKey)) {
-                const cachedData = cache.get(batchKey);
-                const now = Date.now();
-                if (cachedData && now - cachedData.timestamp < CACHE_DURATION) {
-                    console.log(`Using cached data for batch ${batchKey}`);
-                    if (typeof cachedData.data === 'object' && !Array.isArray(cachedData.data)) {
-                        if ('ticker' in cachedData.data) {
-                            // Single ticker data
-                            const singleData = cachedData.data as StockData;
-                            results[singleData.ticker] = singleData;
-                        } else {
-                            // Record of tickers
-                            const recordData = cachedData.data as Record<string, StockData>;
-                            Object.keys(recordData).forEach(t => {
-                                if (tickerBatch.includes(t)) {
-                                    results[t] = recordData[t];
-                                }
-                            });
-                        }
-                    }
-                    continue;
-                }
-            }
-
-            try {
-                // Fetch data for this batch 
-                const batchData = await fetchYahooFinanceData(tickerBatch);
-
-                // Add results to the combined results object
-                Object.keys(batchData).forEach(t => {
-                    results[t] = batchData[t];
-                });
-
-                // Cache this batch result
-                cache.set(batchKey, {
-                    data: batchData,
-                    timestamp: Date.now()
-                });
-            } catch (error) {
-                console.error(`Error processing batch ${batchKey}:`, error);
-
-                // Use fallback data for all tickers in the batch
-                for (const t of tickerBatch) {
-                    const dummyData = generateDummyPrice(t);
-                    results[t] = {
-                        ticker: t,
-                        price: dummyData.price,
-                        priceChange: dummyData.change,
-                        priceChangePercentage: dummyData.changePercentage,
-                        source: 'fallback',
-                        error: 'Processing failed'
-                    };
-                }
-            }
-
-            // Add delay between batch requests
-            if (i + MAX_TICKERS_PER_REQUEST < tickers.length) {
-                await new Promise(resolve => setTimeout(resolve, 500));
+        // First, try to get data from the database
+        for (const t of tickers) {
+            const dbData = await getStockDataFromDatabase(t);
+            if (dbData) {
+                console.log(`Using database data for ${t}`);
+                results[t] = dbData;
             }
         }
 
-        // Cache the combined results
-        cache.set(ticker, {
-            data: results,
-            timestamp: Date.now()
-        });
+        // Filter out tickers that were successfully retrieved from the database
+        const tickersToFetch = tickers.filter(t => !results[t]);
+
+        if (tickersToFetch.length > 0) {
+            console.log(`Need to fetch data for: ${tickersToFetch.join(', ')}`);
+
+            // Process in batches of MAX_TICKERS_PER_REQUEST
+            for (let i = 0; i < tickersToFetch.length; i += MAX_TICKERS_PER_REQUEST) {
+                const tickerBatch = tickersToFetch.slice(i, i + MAX_TICKERS_PER_REQUEST);
+
+                try {
+                    // Fetch data for this batch
+                    const batchData = await fetchYahooFinanceData(tickerBatch);
+
+                    // Add results to the combined results object
+                    Object.keys(batchData).forEach(t => {
+                        results[t] = batchData[t];
+
+                        // Save stock data to database
+                        try {
+                            saveStockToDatabase(batchData[t]);
+                        } catch (dbError) {
+                            console.error(`Error saving ${t} to database:`, dbError);
+                        }
+                    });
+                } catch (error) {
+                    console.error(`Error processing batch ${tickerBatch.join(',')}:`, error);
+
+                    // Use fallback data for failed tickers
+                    for (const t of tickerBatch) {
+                        if (!results[t]) { // Only use fallback if we don't have data yet
+                            const dummyData = generateDummyPrice(t);
+                            results[t] = {
+                                ticker: t,
+                                price: dummyData.price,
+                                priceChange: dummyData.change,
+                                priceChangePercentage: dummyData.changePercentage,
+                                source: 'fallback',
+                                error: 'Processing failed'
+                            };
+                        }
+                    }
+                }
+
+                // Add delay between batch requests
+                if (i + MAX_TICKERS_PER_REQUEST < tickersToFetch.length) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+        }
 
         // If only one ticker was requested, return just that data
         if (tickers.length === 1) {
@@ -181,6 +156,57 @@ export async function GET(request: Request) {
     }
 }
 
+// Get stock data from database if it exists and is fresh
+async function getStockDataFromDatabase(ticker: string): Promise<StockData | null> {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        console.warn('No service role key set, skipping database check');
+        return null;
+    }
+
+    try {
+        const { data, error } = await supabaseAdmin
+            .from('stocks')
+            .select('*')
+            .eq('ticker', ticker)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') { // No rows found
+                console.log(`No data found in database for ticker ${ticker}`);
+            } else {
+                console.error(`Error fetching from database for ticker ${ticker}:`, error);
+            }
+            return null;
+        }
+
+        if (!data) {
+            return null;
+        }
+
+        // Check if data is fresh (less than 30 minutes old)
+        const updatedAt = new Date(data.updated_at);
+        const now = new Date();
+        const thirtyMinutesAgo = new Date(now.getTime() - CACHE_DURATION);
+
+        if (updatedAt < thirtyMinutesAgo) {
+            console.log(`Data for ${ticker} is stale (${updatedAt.toISOString()}), will fetch fresh data`);
+            return null; // Data is stale, fetch new data
+        }
+
+        // Data is fresh, return it
+        return {
+            ticker: data.ticker,
+            price: data.price,
+            priceChange: data.price_change,
+            priceChangePercentage: data.price_change_percentage,
+            source: 'database'
+        };
+    } catch (error) {
+        console.error(`Error checking database for ticker ${ticker}:`, error);
+        return null;
+    }
+}
+
 // Simplified function to fetch Yahoo Finance data with improved reliability
 async function fetchYahooFinanceData(tickers: string[]): Promise<Record<string, StockData>> {
     if (tickers.length === 0) {
@@ -188,17 +214,18 @@ async function fetchYahooFinanceData(tickers: string[]): Promise<Record<string, 
     }
 
     const results: Record<string, StockData> = {};
-    const tickerStr = tickers.join(',');
+    const tickerSetString = tickers.join(',');
 
-    // Format URL exactly as specified
-    const url = `https://finance.yahoo.com/quotes/${tickerStr}/${tickerStr}/`;
+    // Use a single URL format for all cases
+    const url = `https://finance.yahoo.com/quotes/${tickerSetString}/`;
+
     console.log(`Fetching data from Yahoo Finance: ${url}`);
 
     let browser: puppeteer.Browser | null = null;
     let page: puppeteer.Page | null = null;
 
     try {
-        // Get or create browser instance
+        //!!! Please do not change this code.
         browser = await puppeteer.launch();
         page = await browser.newPage();
 
@@ -251,56 +278,61 @@ async function fetchYahooFinanceData(tickers: string[]): Promise<Record<string, 
                     continue;
                 }
 
-                // Extract price, change and percentage data
-                const tickerData = await page.evaluate((symbol) => {
+                // Extract all stock data in one evaluation to reduce Puppeteer calls
+                const stockData = await page.evaluate((symbol) => {
+                    // Get the elements
                     const priceElement = document.querySelector(`fin-streamer[data-symbol="${symbol}"][data-field="regularMarketPrice"]`);
                     const changeElement = document.querySelector(`fin-streamer[data-symbol="${symbol}"][data-field="regularMarketChange"]`);
                     const percentElement = document.querySelector(`fin-streamer[data-symbol="${symbol}"][data-field="regularMarketChangePercent"]`);
 
-                    const price = priceElement ? priceElement.getAttribute('data-value') : null;
-                    const change = changeElement ? changeElement.getAttribute('data-value') : null;
-                    const percent = percentElement ? percentElement.getAttribute('data-value') : null;
+                    // Try multiple attribute possibilities - Yahoo Finance sometimes varies in how it stores these values
+                    let price = 0;
+                    if (priceElement) {
+                        // Try different attribute locations where the data might be stored
+                        price = parseFloat(priceElement.getAttribute('value') ||
+                            priceElement.getAttribute('data-value') ||
+                            priceElement.textContent || '0');
+                    }
 
-                    return { price, change, percent };
+                    let change = 0;
+                    if (changeElement) {
+                        change = parseFloat(changeElement.getAttribute('value') ||
+                            changeElement.getAttribute('data-value') ||
+                            changeElement.textContent || '0');
+                    }
+
+                    let percent = 0;
+                    if (percentElement) {
+                        // For percentage, remove the % symbol if present in text content
+                        const percentText = percentElement.getAttribute('value') ||
+                            percentElement.getAttribute('data-value') ||
+                            percentElement.textContent || '0';
+                        percent = parseFloat(percentText.replace('%', ''));
+                    }
+
+                    return {
+                        price: isNaN(price) ? 0 : price,
+                        change: isNaN(change) ? 0 : change,
+                        percent: isNaN(percent) ? 0 : percent
+                    };
                 }, ticker);
 
-                if (tickerData.price) {
-                    const price = parseFloat(tickerData.price);
+                // Log raw extracted data for debugging
+                console.log(`Raw data for ${ticker}:`, stockData);
 
-                    // Format change to 2 decimal places
-                    let priceChange = null;
-                    if (tickerData.change) {
-                        priceChange = parseFloat(parseFloat(tickerData.change).toFixed(2));
-                    }
+                results[ticker] = {
+                    ticker,
+                    price: stockData.price,
+                    priceChange: stockData.change,
+                    priceChangePercentage: stockData.percent,
+                    source: 'yahoo'
+                };
 
-                    // Format percentage to 2 decimal places
-                    let priceChangePercentage = null;
-                    if (tickerData.percent) {
-                        priceChangePercentage = parseFloat(parseFloat(tickerData.percent).toFixed(2));
-                    }
-
-                    results[ticker] = {
-                        ticker,
-                        price,
-                        priceChange,
-                        priceChangePercentage
-                    };
-
-                    console.log(`Successfully extracted data for ${ticker}: $${price} (${priceChange}, ${priceChangePercentage}%)`);
-                } else {
-                    console.warn(`Failed to extract price data for ${ticker}`);
-                    const dummyData = generateDummyPrice(ticker);
-                    results[ticker] = {
-                        ticker,
-                        price: dummyData.price,
-                        priceChange: dummyData.change,
-                        priceChangePercentage: dummyData.changePercentage,
-                        source: 'fallback',
-                        error: 'Extraction failed'
-                    };
-                }
+                console.log(`Successfully extracted data for ${ticker}: $${stockData.price} (${stockData.change} / ${stockData.percent}%)`);
             } catch (error) {
                 console.error(`Error extracting data for ${ticker}:`, error);
+
+                // Use fallback data for failed tickers
                 const dummyData = generateDummyPrice(ticker);
                 results[ticker] = {
                     ticker,
@@ -308,69 +340,108 @@ async function fetchYahooFinanceData(tickers: string[]): Promise<Record<string, 
                     priceChange: dummyData.change,
                     priceChangePercentage: dummyData.changePercentage,
                     source: 'fallback',
-                    error: 'Error during extraction'
+                    error: error instanceof Error ? error.message : String(error)
                 };
             }
         }
+
+        return results;
     } catch (error) {
-        console.error('Error in Yahoo Finance data fetch:', error);
+        console.error(`Error fetching data from Yahoo Finance:`, error);
         throw error;
     } finally {
-        // Close the page but keep browser instance alive
-        if (page) {
-            await page.close().catch(err => console.error('Error closing page:', err));
+        if (page && !page.isClosed()) {
+            await page.close().catch(() => { });
         }
+        // We keep the browser instance alive for future requests
     }
-
-    return results;
 }
 
-// Generate fallback response with dummy data
+// Helper function to save stock data to database
+async function saveStockToDatabase(stockData: StockData) {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        console.warn('No service role key set, skipping database save');
+        return null;
+    }
+
+    if (!stockData || !stockData.ticker || !stockData.price) {
+        console.error('Invalid stock data:', stockData);
+        return null;
+    }
+
+    try {
+        console.log(`Saving stock data for ${stockData.ticker} to database`);
+
+        const currentTimestamp = new Date().toISOString();
+
+        // With the new schema, we only store the stock data without post_id
+        const stockRecord = {
+            ticker: stockData.ticker,
+            price: stockData.price,
+            price_change: stockData.priceChange || 0,
+            price_change_percentage: stockData.priceChangePercentage || 0,
+            updated_at: currentTimestamp
+        };
+
+        // Upsert the record (insert if not exists, update if exists)
+        const { data, error } = await supabaseAdmin
+            .from('stocks')
+            .upsert(stockRecord, {
+                onConflict: 'ticker'
+            });
+
+        if (error) {
+            console.error(`Error saving stock data for ${stockData.ticker}:`, error);
+            throw error;
+        }
+
+        console.log(`Successfully saved stock data for ${stockData.ticker}`);
+        return data;
+    } catch (error) {
+        console.error(`Failed to save stock data for ${stockData.ticker}:`, error);
+        return null;
+    }
+}
+
+// Generate fallback data for a single ticker
+function generateDummyPrice(ticker: string) {
+    // Use a deterministic algorithm based on the ticker symbol
+    const seed = ticker.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const randomPrice = (seed % 1000) + 10; // Price between 10 and 1010
+    const changeDirection = (seed % 2) === 0 ? 1 : -1;
+    const change = changeDirection * (seed % 10); // Change between -9 and 9
+    const changePercentage = (change / randomPrice) * 100;
+
+    return {
+        price: Math.round(randomPrice * 100) / 100,
+        change: Math.round(change * 100) / 100,
+        changePercentage: Math.round(changePercentage * 100) / 100
+    };
+}
+
+// Generate fallback response for multiple tickers
 function generateFallbackResponse(tickers: string[]) {
+    if (tickers.length === 0) {
+        return NextResponse.json({ error: 'No valid tickers provided' }, { status: 400 });
+    }
+
     const results: Record<string, StockData> = {};
 
     for (const ticker of tickers) {
-        // Generate dummy data based on ticker name
         const dummyData = generateDummyPrice(ticker);
-
         results[ticker] = {
             ticker,
             price: dummyData.price,
             priceChange: dummyData.change,
             priceChangePercentage: dummyData.changePercentage,
-            source: 'fallback'
+            source: 'fallback',
+            error: 'Error fetching data'
         };
     }
 
-    // If only one ticker was requested, return just that data
     if (tickers.length === 1) {
         return NextResponse.json(results[tickers[0]]);
     }
 
     return NextResponse.json(results);
-}
-
-// Fallback function to generate consistent dummy prices based on the ticker
-function generateDummyPrice(ticker: string): { price: number, change: number, changePercentage: number } {
-    // Use the ticker string to generate a somewhat consistent "price"
-    let hash = 0;
-    for (let i = 0; i < ticker.length; i++) {
-        hash = ((hash << 5) - hash) + ticker.charCodeAt(i);
-        hash |= 0; // Convert to 32bit integer
-    }
-
-    // Generate price between $10 and $500
-    const price = Math.abs(hash % 490) + 10;
-
-    // Generate change between -5% and +5%
-    const changePercentage = ((hash % 1000) / 100) - 5;
-
-    // Calculate absolute change based on price and percentage
-    const change = price * (changePercentage / 100);
-
-    return {
-        price: Math.round(price * 100) / 100,
-        change: Math.round(change * 100) / 100,
-        changePercentage: Math.round(changePercentage * 100) / 100
-    };
 } 

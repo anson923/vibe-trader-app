@@ -13,6 +13,7 @@ interface StockData {
 /**
  * Extract stock tickers from post content
  * Looks for $SYMBOL pattern in the text
+ * Returns array of unique ticker symbols without the $ prefix, in alphabetical order
  */
 export function extractStockTickers(content: string): string[] {
     const tickerRegex = /\$([A-Z]{1,5})/g;
@@ -20,8 +21,11 @@ export function extractStockTickers(content: string): string[] {
 
     if (!matches) return [];
 
-    // Remove the $ symbol and return unique tickers
-    return [...new Set(matches.map(match => match.substring(1)))];
+    // Remove the $ symbol, ensure uniqueness with Set, and sort alphabetically
+    const uniqueTickers = [...new Set(matches.map(match => match.substring(1)))];
+
+    // Sort alphabetically for consistent order
+    return uniqueTickers.sort();
 }
 
 /**
@@ -77,26 +81,36 @@ export async function fetchMultipleStockData(tickers: string[]): Promise<Record<
 }
 
 /**
- * Save stock data to the database
+ * Update post with stock tickers and save stock data to the database
  */
 export async function saveStockData(postId: number, stockData: StockData) {
     try {
-        const { data, error } = await supabase
+        console.log(`Saving stock data for ${stockData.ticker} for post ${postId}`);
+
+        // Save/update the stock data in the stocks table (without post_id)
+        const stockRecord = {
+            ticker: stockData.ticker,
+            price: stockData.price,
+            price_change: stockData.priceChange || 0,
+            price_change_percentage: stockData.priceChangePercentage || 0,
+            updated_at: new Date().toISOString()
+        };
+
+        // Upsert the stock record - if it exists, update it; if not, insert it
+        const { data: stockData2, error: stockError } = await supabase
             .from('stocks')
-            .insert({
-                post_id: postId,
-                ticker: stockData.ticker,
-                price: stockData.price,
-                price_change_percentage: stockData.priceChangePercentage || 0
-            })
+            .upsert(stockRecord, { onConflict: 'ticker' })
             .select();
 
-        if (error) {
-            console.error('Error saving stock data:', error);
-            throw error;
+        if (stockError) {
+            console.error('Error saving stock data:', stockError);
+            throw stockError;
         }
 
-        return data;
+        console.log(`Successfully saved/updated stock data for ticker ${stockData.ticker}`);
+
+        // Return the saved stock data
+        return stockData2;
     } catch (error) {
         console.error('Failed to save stock data:', error);
         throw error;
@@ -108,19 +122,121 @@ export async function saveStockData(postId: number, stockData: StockData) {
  */
 export async function getStockDataForPost(postId: number) {
     try {
+        console.log(`Fetching stock data for post ${postId}`);
+
+        // 1. First get the tickers array from the post
+        const { data: postData, error: postError } = await supabase
+            .from('posts')
+            .select('tickers')
+            .eq('id', postId)
+            .single();
+
+        if (postError) {
+            console.error(`Error fetching post data for post ${postId}:`, postError);
+            throw postError;
+        }
+
+        // Make sure tickers is an array
+        const tickers = Array.isArray(postData.tickers) ? postData.tickers : [];
+        console.log(`Post ${postId} has tickers:`, tickers);
+
+        if (tickers.length === 0) {
+            console.log(`No tickers found for post ${postId}`);
+            return [];
+        }
+
+        // 2. Then get the stock data for each ticker
+        const { data: stocksData, error: stocksError } = await supabase
+            .from('stocks')
+            .select('*')
+            .in('ticker', tickers);
+
+        if (stocksError) {
+            console.error(`Error fetching stock data for tickers ${tickers.join(', ')}:`, stocksError);
+            throw stocksError;
+        }
+
+        console.log(`Found ${stocksData.length} stock records for post ${postId}:`, stocksData);
+
+        // Map the database records to the expected format
+        const formattedData = stocksData.map(stock => ({
+            ticker: stock.ticker,
+            price: stock.price,
+            priceChange: stock.price_change,
+            priceChangePercentage: stock.price_change_percentage
+        }));
+
+        console.log(`Formatted stock data for post ${postId}:`, formattedData);
+
+        return formattedData;
+    } catch (error) {
+        console.error(`Failed to fetch stock data for post ${postId}:`, error);
+        return [];
+    }
+}
+
+/**
+ * Get stored stock data for a ticker
+ */
+export async function getStockDataByTicker(ticker: string) {
+    try {
         const { data, error } = await supabase
             .from('stocks')
             .select('*')
-            .eq('post_id', postId);
+            .eq('ticker', ticker)
+            .single();
 
         if (error) {
-            console.error('Error fetching stock data for post:', error);
+            console.error(`Error fetching stock data for ticker ${ticker}:`, error);
+            return null;
+        }
+
+        // Check if data is stale (older than 5 minutes)
+        const updatedAt = new Date(data.updated_at);
+        const now = new Date();
+        const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+
+        if (updatedAt < fiveMinutesAgo) {
+            return null; // Data is stale, should fetch fresh data
+        }
+
+        return {
+            ticker: data.ticker,
+            price: data.price,
+            priceChange: data.price_change,
+            priceChangePercentage: data.price_change_percentage
+        };
+    } catch (error) {
+        console.error(`Failed to fetch stock data for ticker ${ticker}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Update a post's tickers array directly
+ * This can be used if we need to update tickers after post creation
+ */
+export async function updatePostTickers(postId: number, tickers: string[]) {
+    try {
+        console.log(`Updating tickers for post ${postId}:`, tickers);
+
+        // Make sure we have unique tickers
+        const uniqueTickers = [...new Set(tickers)].sort();
+
+        const { error } = await supabase
+            .from('posts')
+            .update({ tickers: uniqueTickers })
+            .eq('id', postId);
+
+        if (error) {
+            console.error(`Error updating tickers for post ${postId}:`, error);
             throw error;
         }
 
-        return data;
+        console.log(`Successfully updated tickers for post ${postId}:`, uniqueTickers);
+        return uniqueTickers;
     } catch (error) {
-        console.error('Failed to fetch stock data for post:', error);
-        return [];
+        console.error(`Failed to update tickers for post ${postId}:`, error);
+        throw error;
     }
 } 

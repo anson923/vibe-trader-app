@@ -30,13 +30,23 @@ interface PostCardProps {
   }
 }
 
+// Define type for the stock data returned from getStockDataForPost
+interface ApiStockData {
+  ticker: string;
+  price: number;
+  priceChange: number | null;
+  priceChangePercentage: number | null;
+}
+
+// Type used within this component
 interface StockData {
-  id: number
-  ticker: string
-  price: number
-  price_change_percentage: number
-  post_id: number
-  created_at: string
+  id: number;
+  ticker: string;
+  price: number;
+  price_change: number;
+  price_change_percentage: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export default function PostCard({
@@ -58,8 +68,32 @@ export default function PostCard({
   // Fetch stock data for this post
   useEffect(() => {
     async function fetchStockData() {
-      const data = await getStockDataForPost(id);
-      setStockData(data as StockData[]);
+      try {
+        console.log(`Fetching stock data for post ${id}`);
+        const data = await getStockDataForPost(id) as ApiStockData[];
+        console.log(`Received stock data for post ${id}:`, data);
+
+        if (!data || data.length === 0) {
+          console.log(`No stock data found for post ${id}`);
+          return;
+        }
+
+        // Generate random IDs for the stocks since we don't have real ones
+        const processedData: StockData[] = data.map((item, index) => ({
+          id: Date.now() + index, // Use timestamp + index as a unique id
+          ticker: item.ticker,
+          price: item.price,
+          price_change: item.priceChange || 0,
+          price_change_percentage: item.priceChangePercentage || 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }));
+
+        console.log(`Processed stock data for post ${id}:`, processedData);
+        setStockData(processedData);
+      } catch (error) {
+        console.error(`Error fetching stock data for post ${id}:`, error);
+      }
     }
 
     fetchStockData();
@@ -181,6 +215,7 @@ export default function PostCard({
                 key={stock.id}
                 ticker={stock.ticker}
                 price={stock.price}
+                priceChange={stock.price_change}
                 priceChangePercentage={stock.price_change_percentage}
               />
             ))}
