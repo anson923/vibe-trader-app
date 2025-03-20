@@ -89,8 +89,8 @@ export default function CreatePostPage() {
     const errors = [];
 
     try {
-      // Fetch all tickers in a single API call
-      const batchSize = 5; // Process in batches of 5 tickers
+      // Process tickers in batches to improve efficiency while maintaining reliability
+      const batchSize = 5; // Process up to 5 tickers at once for better performance
 
       for (let i = 0; i < tickers.length; i += batchSize) {
         const tickerBatch = tickers.slice(i, i + batchSize);
@@ -116,6 +116,11 @@ export default function CreatePostPage() {
             errors.push({ ticker, error });
             console.error(`Error saving data for ticker ${ticker}:`, error);
           }
+        }
+
+        // Add delay between processing batches to avoid rate limiting
+        if (i + batchSize < tickers.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
     } catch (error) {

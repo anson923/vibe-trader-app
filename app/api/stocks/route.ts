@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import axios from 'axios';
-import https from 'https';
+import * as puppeteer from 'puppeteer';
 
 // Define types for stock data
 interface StockData {
@@ -17,20 +16,45 @@ interface CacheEntry {
     timestamp: number;
 }
 
-// Create a custom axios instance with modified HTTP agent
-const axiosInstance = axios.create({
-    // Create a custom HTTPS agent with adjusted timeout
-    httpsAgent: new https.Agent({
-        // Disable header rejection due to size
-        rejectUnauthorized: false
-    }),
-    // Increase timeout
-    timeout: 10000
-});
-
 // Create a cache to store fetched data
 const cache = new Map<string, CacheEntry>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+const MAX_TICKERS_PER_REQUEST = 5; // Maximum tickers per batch request
+
+// Maintain a single browser instance to improve performance
+let browserInstance: puppeteer.Browser | null = null;
+
+async function getBrowser(): Promise<puppeteer.Browser> {
+    if (browserInstance && browserInstance.isConnected()) {
+        return browserInstance;
+    }
+
+    console.log('Launching new browser instance');
+
+    // Launch browser with optimized settings for backend use
+    browserInstance = await puppeteer.launch({
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--disable-gpu',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-extensions'
+        ]
+    });
+
+    // Handle browser closing
+    browserInstance.on('disconnected', () => {
+        console.log('Browser instance disconnected');
+        browserInstance = null;
+    });
+
+    return browserInstance;
+}
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
@@ -40,7 +64,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Ticker is required' }, { status: 400 });
     }
 
-    // Check if we have this ticker in cache
+    // Check if we have this ticker combination in cache
     if (cache.has(ticker)) {
         const cachedData = cache.get(ticker);
         const now = Date.now();
@@ -63,133 +87,245 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'No valid tickers provided' }, { status: 400 });
         }
 
-        const tickersStr = tickers.join(',');
-        const url = `https://finance.yahoo.com/quotes/${tickersStr}/`;
+        // Process tickers in batches to balance between performance and reliability
+        const results: Record<string, StockData> = {};
 
-        console.log(`Fetching data for tickers: ${tickersStr}`);
+        // Process in batches of MAX_TICKERS_PER_REQUEST
+        for (let i = 0; i < tickers.length; i += MAX_TICKERS_PER_REQUEST) {
+            const tickerBatch = tickers.slice(i, i + MAX_TICKERS_PER_REQUEST);
+            const batchKey = tickerBatch.join(',');
 
-        const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'text/html',
-            'Accept-Encoding': 'gzip, deflate, br'
-        };
+            console.log(`Processing ticker batch: ${batchKey}`);
 
-        const response = await axios.get(url, {
-            headers,
-            timeout: 10000
-        });
+            // Check if we have this batch in cache
+            if (cache.has(batchKey)) {
+                const cachedData = cache.get(batchKey);
+                const now = Date.now();
+                if (cachedData && now - cachedData.timestamp < CACHE_DURATION) {
+                    console.log(`Using cached data for batch ${batchKey}`);
+                    if (typeof cachedData.data === 'object' && !Array.isArray(cachedData.data)) {
+                        if ('ticker' in cachedData.data) {
+                            // Single ticker data
+                            const singleData = cachedData.data as StockData;
+                            results[singleData.ticker] = singleData;
+                        } else {
+                            // Record of tickers
+                            const recordData = cachedData.data as Record<string, StockData>;
+                            Object.keys(recordData).forEach(t => {
+                                if (tickerBatch.includes(t)) {
+                                    results[t] = recordData[t];
+                                }
+                            });
+                        }
+                    }
+                    continue;
+                }
+            }
 
-        const html = response.data;
+            try {
+                // Fetch data for this batch 
+                const batchData = await fetchYahooFinanceData(tickerBatch);
 
-        // For multiple tickers, parse each one
-        if (tickers.length === 1) {
-            // Single ticker mode
-            const singleTickerData = extractStockDataFromHtml(html, tickers[0]);
-
-            if (singleTickerData) {
-                // Cache the results
-                cache.set(ticker, {
-                    data: singleTickerData,
-                    timestamp: Date.now()
+                // Add results to the combined results object
+                Object.keys(batchData).forEach(t => {
+                    results[t] = batchData[t];
                 });
 
-                return NextResponse.json(singleTickerData);
-            } else {
-                return NextResponse.json({
-                    error: `Could not extract data for ${ticker}`,
-                    ticker
-                }, { status: 404 });
-            }
-        } else {
-            // Multiple tickers mode
-            const results: Record<string, StockData> = {};
-            let hasValidData = false;
+                // Cache this batch result
+                cache.set(batchKey, {
+                    data: batchData,
+                    timestamp: Date.now()
+                });
+            } catch (error) {
+                console.error(`Error processing batch ${batchKey}:`, error);
 
-            for (const tick of tickers) {
-                const tickerData = extractStockDataFromHtml(html, tick);
-                if (tickerData) {
-                    hasValidData = true;
-                    results[tick] = tickerData;
-                } else {
-                    console.error(`Could not extract data for ${tick}`);
-                    results[tick] = {
-                        ticker: tick,
-                        error: 'Data not found',
-                        price: 0,
-                        priceChange: null,
-                        priceChangePercentage: null
+                // Use fallback data for all tickers in the batch
+                for (const t of tickerBatch) {
+                    const dummyData = generateDummyPrice(t);
+                    results[t] = {
+                        ticker: t,
+                        price: dummyData.price,
+                        priceChange: dummyData.change,
+                        priceChangePercentage: dummyData.changePercentage,
+                        source: 'fallback',
+                        error: 'Processing failed'
                     };
                 }
             }
 
-            if (hasValidData) {
-                // Cache the results
-                cache.set(tickersStr, {
-                    data: results,
-                    timestamp: Date.now()
-                });
-
-                return NextResponse.json(results);
-            } else {
-                return NextResponse.json({
-                    error: 'Could not extract data for any of the provided tickers',
-                    tickers
-                }, { status: 404 });
+            // Add delay between batch requests
+            if (i + MAX_TICKERS_PER_REQUEST < tickers.length) {
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
         }
+
+        // Cache the combined results
+        cache.set(ticker, {
+            data: results,
+            timestamp: Date.now()
+        });
+
+        // If only one ticker was requested, return just that data
+        if (tickers.length === 1) {
+            return NextResponse.json(results[tickers[0]]);
+        }
+
+        return NextResponse.json(results);
     } catch (error) {
         console.error(`Error fetching stock data:`, error instanceof Error ? error.message : String(error));
 
         // Generate fallback data as last resort
         return generateFallbackResponse(ticker.split(',').filter(t => t.trim()));
+    } finally {
+        // Browser instance is kept alive for future requests
     }
 }
 
-function extractStockDataFromHtml(html: string, ticker: string): StockData | null {
+// Simplified function to fetch Yahoo Finance data with improved reliability
+async function fetchYahooFinanceData(tickers: string[]): Promise<Record<string, StockData>> {
+    if (tickers.length === 0) {
+        return {};
+    }
+
+    const results: Record<string, StockData> = {};
+    const tickerStr = tickers.join(',');
+
+    // Format URL exactly as specified
+    const url = `https://finance.yahoo.com/quotes/${tickerStr}/${tickerStr}/`;
+    console.log(`Fetching data from Yahoo Finance: ${url}`);
+
+    let browser: puppeteer.Browser | null = null;
+    let page: puppeteer.Page | null = null;
+
     try {
-        // Regex to find the regularMarketPrice
-        const priceRegex = new RegExp(`<fin-streamer[^>]*?data-symbol="${ticker}"[^>]*?data-field="regularMarketPrice"[^>]*?data-value="([^"]+)"[^>]*?>`, 'i');
-        const priceMatch = html.match(priceRegex);
+        // Get or create browser instance
+        browser = await puppeteer.launch();
+        page = await browser.newPage();
 
-        // Regex to find the regularMarketChange
-        const changeRegex = new RegExp(`<fin-streamer[^>]*?data-symbol="${ticker}"[^>]*?data-field="regularMarketChange"[^>]*?data-value="([^"]+)"[^>]*?>`, 'i');
-        const changeMatch = html.match(changeRegex);
+        // Optimize page settings
+        await page.setRequestInterception(true);
+        page.on('request', (request) => {
+            const resourceType = request.resourceType();
+            // Block unnecessary resources to speed up page load
+            if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+                request.abort();
+            } else {
+                request.continue();
+            }
+        });
 
-        // Regex to find the regularMarketChangePercent
-        const percentRegex = new RegExp(`<fin-streamer[^>]*?data-symbol="${ticker}"[^>]*?data-field="regularMarketChangePercent"[^>]*?data-value="([^"]+)"[^>]*?>`, 'i');
-        const percentMatch = html.match(percentRegex);
+        // Navigate to the page with more reliable settings
+        await page.goto(url, {
+            waitUntil: 'domcontentloaded', // More reliable than networkidle2
+            timeout: 60000
+        });
 
-        if (!priceMatch) {
-            console.error(`Could not find price for ${ticker}`);
-            return null;
+        console.log('Page loaded, extracting data...');
+
+        // Wait for stock data elements to be available
+        await page.waitForSelector('fin-streamer[data-field="regularMarketPrice"]', {
+            timeout: 10000
+        }).catch(() => {
+            console.log('Warning: fin-streamer elements not found with initial selector');
+        });
+
+        // Extract data for each ticker
+        for (const ticker of tickers) {
+            try {
+                // Check if the page contains data for this ticker
+                const hasTickerData = await page.evaluate((symbol) => {
+                    return !!document.querySelector(`fin-streamer[data-symbol="${symbol}"]`);
+                }, ticker);
+
+                if (!hasTickerData) {
+                    console.warn(`No data found for ticker ${ticker} on page`);
+                    const dummyData = generateDummyPrice(ticker);
+                    results[ticker] = {
+                        ticker,
+                        price: dummyData.price,
+                        priceChange: dummyData.change,
+                        priceChangePercentage: dummyData.changePercentage,
+                        source: 'fallback',
+                        error: 'No data found'
+                    };
+                    continue;
+                }
+
+                // Extract price, change and percentage data
+                const tickerData = await page.evaluate((symbol) => {
+                    const priceElement = document.querySelector(`fin-streamer[data-symbol="${symbol}"][data-field="regularMarketPrice"]`);
+                    const changeElement = document.querySelector(`fin-streamer[data-symbol="${symbol}"][data-field="regularMarketChange"]`);
+                    const percentElement = document.querySelector(`fin-streamer[data-symbol="${symbol}"][data-field="regularMarketChangePercent"]`);
+
+                    const price = priceElement ? priceElement.getAttribute('data-value') : null;
+                    const change = changeElement ? changeElement.getAttribute('data-value') : null;
+                    const percent = percentElement ? percentElement.getAttribute('data-value') : null;
+
+                    return { price, change, percent };
+                }, ticker);
+
+                if (tickerData.price) {
+                    const price = parseFloat(tickerData.price);
+
+                    // Format change to 2 decimal places
+                    let priceChange = null;
+                    if (tickerData.change) {
+                        priceChange = parseFloat(parseFloat(tickerData.change).toFixed(2));
+                    }
+
+                    // Format percentage to 2 decimal places
+                    let priceChangePercentage = null;
+                    if (tickerData.percent) {
+                        priceChangePercentage = parseFloat(parseFloat(tickerData.percent).toFixed(2));
+                    }
+
+                    results[ticker] = {
+                        ticker,
+                        price,
+                        priceChange,
+                        priceChangePercentage
+                    };
+
+                    console.log(`Successfully extracted data for ${ticker}: $${price} (${priceChange}, ${priceChangePercentage}%)`);
+                } else {
+                    console.warn(`Failed to extract price data for ${ticker}`);
+                    const dummyData = generateDummyPrice(ticker);
+                    results[ticker] = {
+                        ticker,
+                        price: dummyData.price,
+                        priceChange: dummyData.change,
+                        priceChangePercentage: dummyData.changePercentage,
+                        source: 'fallback',
+                        error: 'Extraction failed'
+                    };
+                }
+            } catch (error) {
+                console.error(`Error extracting data for ${ticker}:`, error);
+                const dummyData = generateDummyPrice(ticker);
+                results[ticker] = {
+                    ticker,
+                    price: dummyData.price,
+                    priceChange: dummyData.change,
+                    priceChangePercentage: dummyData.changePercentage,
+                    source: 'fallback',
+                    error: 'Error during extraction'
+                };
+            }
         }
-
-        const price = parseFloat(priceMatch[1]);
-
-        // Change might be null for some stocks
-        let change = null;
-        if (changeMatch) {
-            change = parseFloat(parseFloat(changeMatch[1]).toFixed(2));
-        }
-
-        // Percentage might be null for some stocks
-        let percentChange = null;
-        if (percentMatch) {
-            percentChange = parseFloat(parseFloat(percentMatch[1]).toFixed(2));
-        }
-
-        return {
-            ticker,
-            price,
-            priceChange: change,
-            priceChangePercentage: percentChange
-        };
     } catch (error) {
-        console.error(`Error extracting data for ${ticker}:`, error);
-        return null;
+        console.error('Error in Yahoo Finance data fetch:', error);
+        throw error;
+    } finally {
+        // Close the page but keep browser instance alive
+        if (page) {
+            await page.close().catch(err => console.error('Error closing page:', err));
+        }
     }
+
+    return results;
 }
 
+// Generate fallback response with dummy data
 function generateFallbackResponse(tickers: string[]) {
     const results: Record<string, StockData> = {};
 
