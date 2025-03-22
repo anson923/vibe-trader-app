@@ -119,11 +119,76 @@ export async function saveStockData(postId: number, stockData: StockData) {
 
 /**
  * Get stored stock data for a post
+ * Uses cached API endpoints with fallback to direct Supabase queries
  */
 export async function getStockDataForPost(postId: number) {
     try {
         console.log(`Fetching stock data for post ${postId}`);
 
+        // 1. First try to get the post from cached API
+        try {
+            const postResponse = await fetch(`/api/cached-posts?id=${postId}`);
+            
+            if (!postResponse.ok) {
+                throw new Error(`Failed to fetch post from cached API: ${postResponse.statusText}`);
+            }
+            
+            const postResult = await postResponse.json();
+            
+            if (postResult.data && Array.isArray(postResult.data) && postResult.data.length > 0) {
+                const postData = postResult.data[0];
+                
+                // Make sure tickers is an array
+                const tickers = Array.isArray(postData.tickers) ? postData.tickers : [];
+                console.log(`Post ${postId} has tickers:`, tickers);
+                
+                if (tickers.length === 0) {
+                    console.log(`No tickers found for post ${postId}`);
+                    return [];
+                }
+                
+                // 2. Then try to get the stock data from cached API
+                try {
+                    const stocksResponse = await fetch(`/api/cached-stocks?tickers=${tickers.join(',')}`);
+                    
+                    if (!stocksResponse.ok) {
+                        throw new Error(`Failed to fetch stocks from cached API: ${stocksResponse.statusText}`);
+                    }
+                    
+                    const stocksResult = await stocksResponse.json();
+                    
+                    if (stocksResult.data && Array.isArray(stocksResult.data)) {
+                        const stocksData = stocksResult.data;
+                        console.log(`Found ${stocksData.length} stock records for post ${postId}:`, stocksData);
+                        
+                        // Map the records to the expected format
+                        const formattedData = stocksData.map((stock: { 
+                            ticker: string; 
+                            price: number; 
+                            price_change: number; 
+                            price_change_percentage: number;
+                        }) => ({
+                            ticker: stock.ticker,
+                            price: stock.price,
+                            priceChange: stock.price_change,
+                            priceChangePercentage: stock.price_change_percentage
+                        }));
+                        
+                        console.log(`Formatted stock data for post ${postId}:`, formattedData);
+                        return formattedData;
+                    }
+                } catch (stocksError) {
+                    console.warn(`Failed to fetch stocks from cached API, falling back to direct query:`, stocksError);
+                    // Continue to fallback
+                }
+            }
+        } catch (postError) {
+            console.warn(`Failed to fetch post from cached API, falling back to direct query:`, postError);
+            // Continue to fallback
+        }
+        
+        // FALLBACK: Direct Supabase queries if cached API fails
+        
         // 1. First get the tickers array from the post
         const { data: postData, error: postError } = await supabase
             .from('posts')
@@ -159,7 +224,12 @@ export async function getStockDataForPost(postId: number) {
         console.log(`Found ${stocksData.length} stock records for post ${postId}:`, stocksData);
 
         // Map the database records to the expected format
-        const formattedData = stocksData.map(stock => ({
+        const formattedData = stocksData.map((stock: { 
+            ticker: string; 
+            price: number; 
+            price_change: number; 
+            price_change_percentage: number;
+        }) => ({
             ticker: stock.ticker,
             price: stock.price,
             priceChange: stock.price_change,
@@ -177,9 +247,35 @@ export async function getStockDataForPost(postId: number) {
 
 /**
  * Get stored stock data for a ticker
+ * Uses cached API with fallback to direct Supabase query
  */
 export async function getStockDataByTicker(ticker: string) {
     try {
+        // First try to get the stock from cached API
+        try {
+            const response = await fetch(`/api/cached-stocks?ticker=${ticker}`);
+            
+            if (!response.ok) {
+                throw new Error(`Failed to fetch stock from cached API: ${response.statusText}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.data) {
+                const stockData = result.data;
+                return {
+                    ticker: stockData.ticker,
+                    price: stockData.price,
+                    priceChange: stockData.price_change,
+                    priceChangePercentage: stockData.price_change_percentage
+                };
+            }
+        } catch (cacheError) {
+            console.warn(`Failed to fetch stock from cached API, falling back to direct query:`, cacheError);
+            // Continue to fallback
+        }
+        
+        // FALLBACK: Direct Supabase query if cached API fails
         const { data, error } = await supabase
             .from('stocks')
             .select('*')

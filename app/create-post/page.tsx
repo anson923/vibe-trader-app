@@ -40,39 +40,75 @@ export default function CreatePostPage() {
       const tickers = extractStockTickers(content);
       console.log("Extracted tickers from content:", tickers);
 
-      // Save post to Supabase with tickers array
-      const { data, error } = await supabase
-        .from('posts')
-        .insert([
-          {
-            content: content.trim(),
-            user_id: user.id,
-            username: user.user_metadata?.username || "Anonymous",
-            avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg?height=40&width=40",
-            tickers: tickers // Set tickers array directly during post creation
+      // Create the post data
+      const postData = {
+        content: content.trim(),
+        user_id: user.id,
+        username: user.user_metadata?.username || "Anonymous",
+        avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg?height=40&width=40",
+        tickers: tickers // Set tickers array directly during post creation
+      };
+
+      // First try to use the cached API endpoint
+      let postResponse;
+      try {
+        postResponse = await fetch('/api/cached-posts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(postData),
+        });
+
+        if (!postResponse.ok) {
+          throw new Error('Failed to create post using cached API');
+        }
+
+        const result = await postResponse.json();
+        console.log("Post created successfully using cached API:", result);
+        
+        // Process stock tickers if present
+        const postId = result.data.id;
+
+        if (tickers.length > 0) {
+          setProcessingStocks(true);
+          try {
+            await processStockTickers(tickers, postId);
+            console.log("Successfully processed stock tickers:", tickers);
+          } catch (stockError) {
+            console.error("Error processing stock tickers:", stockError);
+            // Continue anyway since the post was created successfully
           }
-        ])
-        .select()
+        }
+      } catch (cacheError) {
+        console.warn("Couldn't use cached API, falling back to direct Supabase:", cacheError);
+        
+        // Fallback to direct Supabase insertion if cached API fails
+        const { data, error } = await supabase
+          .from('posts')
+          .insert([postData])
+          .select();
 
-      if (error) {
-        console.error("Error creating post:", error)
-        setError("Failed to create post. Please try again.")
-        throw error
-      }
+        if (error) {
+          console.error("Error creating post:", error);
+          setError("Failed to create post. Please try again.");
+          throw error;
+        }
 
-      console.log("Post created successfully with tickers:", tickers);
+        console.log("Post created successfully with tickers (fallback):", tickers);
 
-      // Process stock tickers if present
-      const postId = data[0].id
+        // Process stock tickers if present
+        const postId = data[0].id;
 
-      if (tickers.length > 0) {
-        setProcessingStocks(true)
-        try {
-          await processStockTickers(tickers, postId)
-          console.log("Successfully processed stock tickers:", tickers)
-        } catch (stockError) {
-          console.error("Error processing stock tickers:", stockError)
-          // Continue anyway since the post was created successfully
+        if (tickers.length > 0) {
+          setProcessingStocks(true);
+          try {
+            await processStockTickers(tickers, postId);
+            console.log("Successfully processed stock tickers:", tickers);
+          } catch (stockError) {
+            console.error("Error processing stock tickers:", stockError);
+            // Continue anyway since the post was created successfully
+          }
         }
       }
 
@@ -113,9 +149,30 @@ export default function CreatePostPage() {
             try {
               // Check if we got valid data
               if (stocksData && stocksData[ticker] && stocksData[ticker].price) {
-                const savedData = await saveStockData(postId, stocksData[ticker]);
-                results.push({ ticker, savedData });
-                console.log(`Successfully processed ticker: ${ticker}`);
+                // First try to use the cached API endpoint
+                try {
+                  const response = await fetch('/api/cached-stocks', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(stocksData[ticker]),
+                  });
+
+                  if (!response.ok) {
+                    throw new Error('Failed to update stock using cached API');
+                  }
+
+                  const result = await response.json();
+                  results.push({ ticker, savedData: result.data });
+                  console.log(`Successfully processed ticker using cached API: ${ticker}`);
+                } catch (cacheError) {
+                  console.warn(`Couldn't use cached API for ${ticker}, falling back to direct method:`, cacheError);
+                  // Fallback to direct method
+                  const savedData = await saveStockData(postId, stocksData[ticker]);
+                  results.push({ ticker, savedData });
+                  console.log(`Successfully processed ticker (fallback): ${ticker}`);
+                }
               } else {
                 console.warn(`No valid data received for ticker: ${ticker}`);
                 // Even if we don't have data, we'll consider this a success

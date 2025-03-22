@@ -42,18 +42,57 @@ interface FormattedPost {
 export default function FeedPage() {
   const [posts, setPosts] = useState<FormattedPost[]>([])
   const [loading, setLoading] = useState(true)
+  const [stocks, setStocks] = useState<any[]>([])
+  const [loadingStocks, setLoadingStocks] = useState(true)
 
   useEffect(() => {
     async function fetchPosts() {
       try {
-        // Get posts from Supabase, ordered by most recent
+        // First try to get posts from the cached API
+        try {
+          const response = await fetch('/api/cached-posts');
+          
+          if (!response.ok) {
+            throw new Error('Failed to fetch from cached API');
+          }
+          
+          const result = await response.json();
+          
+          if (result.data && Array.isArray(result.data)) {
+            // Format posts for the PostCard component
+            const formattedPosts = result.data.map((post: Post): FormattedPost => ({
+              id: post.id,
+              user: {
+                name: post.username,
+                username: post.username.toLowerCase().replace(/\s+/g, ''),
+                avatar: post.avatar_url || "/placeholder.svg?height=40&width=40",
+                profit: 0, // Default value since profit isn't in our posts table
+              },
+              content: post.content,
+              time: formatTimeAgo(new Date(post.created_at)),
+              stats: {
+                likes: post.likes_count || 0,
+                comments: post.comments_count || 0,
+                reposts: 0,
+              },
+            }));
+
+            setPosts(formattedPosts);
+            console.log('Successfully fetched posts from cached API');
+            return; // Exit if cached fetch was successful
+          }
+        } catch (cacheError) {
+          console.warn('Failed to fetch posts from cached API, falling back to direct Supabase:', cacheError);
+        }
+
+        // Fallback to direct Supabase if cached API fails
         const { data, error } = await supabase
           .from('posts')
           .select('*')
-          .order('created_at', { ascending: false })
+          .order('created_at', { ascending: false });
 
         if (error) {
-          throw error
+          throw error;
         }
 
         if (data) {
@@ -73,19 +112,69 @@ export default function FeedPage() {
               comments: post.comments_count || 0,
               reposts: 0,
             },
-          }))
+          }));
 
-          setPosts(formattedPosts)
+          setPosts(formattedPosts);
+          console.log('Successfully fetched posts from Supabase (fallback)');
         }
       } catch (error) {
-        console.error("Error fetching posts:", error)
+        console.error("Error fetching posts:", error);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
     }
 
-    fetchPosts()
-  }, [])
+    fetchPosts();
+  }, []);
+
+  // Fetch stocks from cache
+  useEffect(() => {
+    async function fetchStocks() {
+      try {
+        // Try to get stocks from the cached API
+        try {
+          const response = await fetch('/api/cached-stocks');
+          
+          if (!response.ok) {
+            throw new Error('Failed to fetch from cached stocks API');
+          }
+          
+          const result = await response.json();
+          
+          if (result.data && Array.isArray(result.data)) {
+            // Get top 5 stocks
+            const topStocks = result.data.slice(0, 5);
+            setStocks(topStocks);
+            console.log('Successfully fetched stocks from cached API');
+            return; // Exit if cached fetch was successful
+          }
+        } catch (cacheError) {
+          console.warn('Failed to fetch stocks from cached API, falling back to direct Supabase:', cacheError);
+        }
+
+        // Fallback to direct Supabase if cached API fails
+        const { data, error } = await supabase
+          .from('stocks')
+          .select('*')
+          .limit(5);
+
+        if (error) {
+          throw error;
+        }
+
+        if (data) {
+          setStocks(data);
+          console.log('Successfully fetched stocks from Supabase (fallback)');
+        }
+      } catch (error) {
+        console.error("Error fetching stocks:", error);
+      } finally {
+        setLoadingStocks(false);
+      }
+    }
+
+    fetchStocks();
+  }, []);
 
   // Helper function to format time ago
   function formatTimeAgo(date: Date): string {
@@ -174,66 +263,28 @@ export default function FeedPage() {
                 <CardTitle>Trading Stocks</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="border-gray-700 bg-gray-800">
-                      $AAPL
-                    </Badge>
-                    <span>Apple Inc.</span>
+                {loadingStocks ? (
+                  <div className="flex justify-center py-2">
+                    <div className="animate-pulse text-gray-400">Loading stocks...</div>
                   </div>
-                  <div className="flex items-center text-green-500">
-                    <TrendingUp className="h-4 w-4 mr-1" />
-                    <span>2.4%</span>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="border-gray-700 bg-gray-800">
-                      $TSLA
-                    </Badge>
-                    <span>Tesla Inc.</span>
-                  </div>
-                  <div className="flex items-center text-red-500">
-                    <TrendingUp className="h-4 w-4 mr-1" />
-                    <span>-1.2%</span>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="border-gray-700 bg-gray-800">
-                      $MSFT
-                    </Badge>
-                    <span>Microsoft Corp.</span>
-                  </div>
-                  <div className="flex items-center text-green-500">
-                    <TrendingUp className="h-4 w-4 mr-1" />
-                    <span>1.8%</span>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="border-gray-700 bg-gray-800">
-                      $NVDA
-                    </Badge>
-                    <span>NVIDIA Corp.</span>
-                  </div>
-                  <div className="flex items-center text-green-500">
-                    <TrendingUp className="h-4 w-4 mr-1" />
-                    <span>3.5%</span>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="border-gray-700 bg-gray-800">
-                      $AMZN
-                    </Badge>
-                    <span>Amazon.com Inc.</span>
-                  </div>
-                  <div className="flex items-center text-green-500">
-                    <TrendingUp className="h-4 w-4 mr-1" />
-                    <span>0.9%</span>
-                  </div>
-                </div>
+                ) : stocks.length > 0 ? (
+                  stocks.map((stock) => (
+                    <div key={stock.ticker} className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="border-gray-700 bg-gray-800">
+                          ${stock.ticker}
+                        </Badge>
+                        <span>{stock.ticker}</span>
+                      </div>
+                      <div className={`flex items-center ${parseFloat(stock.price_change_percentage) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        <TrendingUp className="h-4 w-4 mr-1" />
+                        <span>{parseFloat(stock.price_change_percentage).toFixed(2)}%</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-gray-400 text-sm">No stock data available</div>
+                )}
               </CardContent>
             </Card>
 
