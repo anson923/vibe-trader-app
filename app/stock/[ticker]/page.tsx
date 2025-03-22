@@ -1,4 +1,5 @@
 "use client"
+import React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, TrendingUp } from "lucide-react"
@@ -12,117 +13,8 @@ interface StockPageProps {
   }
 }
 
-// Sample stock data
-const stocksDatabase: Record<string, any> = {
-  AAPL: {
-    ticker: "AAPL",
-    name: "Apple Inc.",
-    change: 2.4,
-    price: 182.63,
-    marketCap: "2.87T",
-    peRatio: 28.4,
-    dividend: 0.58,
-    volume: "62.3M",
-    avgVolume: "58.1M",
-    high52: 198.23,
-    low52: 143.9,
-    description:
-      "Apple Inc. designs, manufactures, and markets smartphones, personal computers, tablets, wearables, and accessories worldwide. The company offers iPhone, a line of smartphones; Mac, a line of personal computers; iPad, a line of multi-purpose tablets; and wearables, home, and accessories comprising AirPods, Apple TV, Apple Watch, Beats products, and HomePod.",
-  },
-  TSLA: {
-    ticker: "TSLA",
-    name: "Tesla Inc.",
-    change: -1.2,
-    price: 175.34,
-    marketCap: "558.2B",
-    peRatio: 50.7,
-    dividend: 0,
-    volume: "92.1M",
-    avgVolume: "103.5M",
-    high52: 278.98,
-    low52: 152.37,
-    description:
-      "Tesla, Inc. designs, develops, manufactures, leases, and sells electric vehicles, and energy generation and storage systems in the United States, China, and internationally. The company operates in two segments, Automotive, and Energy Generation and Storage.",
-  },
-  MSFT: {
-    ticker: "MSFT",
-    name: "Microsoft Corp.",
-    change: 1.8,
-    price: 417.88,
-    marketCap: "3.11T",
-    peRatio: 36.2,
-    dividend: 0.75,
-    volume: "21.5M",
-    avgVolume: "24.3M",
-    high52: 430.82,
-    low52: 309.98,
-    description:
-      "Microsoft Corporation develops, licenses, and supports software, services, devices, and solutions worldwide. The company operates in three segments: Productivity and Business Processes, Intelligent Cloud, and More Personal Computing.",
-  },
-  NVDA: {
-    ticker: "NVDA",
-    name: "NVIDIA Corp.",
-    change: 3.5,
-    price: 950.02,
-    marketCap: "2.34T",
-    peRatio: 79.8,
-    dividend: 0.04,
-    volume: "41.2M",
-    avgVolume: "45.8M",
-    high52: 974.0,
-    low52: 222.97,
-    description:
-      "NVIDIA Corporation provides graphics, and compute and networking solutions in the United States, Taiwan, China, and internationally. The company's Graphics segment offers GeForce GPUs for gaming and PCs, the GeForce NOW game streaming service and related infrastructure, and solutions for gaming platforms.",
-  },
-  AMZN: {
-    ticker: "AMZN",
-    name: "Amazon.com Inc.",
-    change: 0.9,
-    price: 178.75,
-    marketCap: "1.86T",
-    peRatio: 61.2,
-    dividend: 0,
-    volume: "32.7M",
-    avgVolume: "38.5M",
-    high52: 185.1,
-    low52: 118.35,
-    description:
-      "Amazon.com, Inc. engages in the retail sale of consumer products and subscriptions through online and physical stores in North America and internationally. It operates through three segments: North America, International, and Amazon Web Services (AWS).",
-  },
-  GOOG: {
-    ticker: "GOOG",
-    name: "Alphabet Inc.",
-    change: 1.3,
-    price: 147.6,
-    marketCap: "1.83T",
-    peRatio: 25.1,
-    dividend: 0,
-    volume: "18.9M",
-    avgVolume: "20.7M",
-    high52: 155.2,
-    low52: 104.42,
-    description:
-      "Alphabet Inc. provides various products and platforms in the United States, Europe, the Middle East, Africa, the Asia-Pacific, Canada, and Latin America. It operates through Google Services, Google Cloud, and Other Bets segments.",
-  },
-  META: {
-    ticker: "META",
-    name: "Meta Platforms Inc.",
-    change: -0.7,
-    price: 485.58,
-    marketCap: "1.24T",
-    peRatio: 28.3,
-    dividend: 0,
-    volume: "15.3M",
-    avgVolume: "16.8M",
-    high52: 531.49,
-    low52: 274.38,
-    description:
-      "Meta Platforms, Inc. engages in the development of products that enable people to connect and share with friends and family through mobile devices, personal computers, virtual reality headsets, and wearables worldwide. It operates in two segments, Family of Apps and Reality Labs.",
-  },
-}
-
-export default function StockPage({ params }: StockPageProps) {
-  const { ticker } = params
+// Component that receives the unwrapped ticker
+function StockPageContent({ ticker }: { ticker: string }) {
   const stockInfo = stocksDatabase[ticker.toUpperCase()]
 
   if (!stockInfo) {
@@ -308,5 +200,122 @@ export default function StockPage({ params }: StockPageProps) {
       </div>
     </div>
   )
+}
+
+// Sample stock data
+const stocksDatabase: Record<string, any> = {
+  AAPL: {
+    ticker: "AAPL",
+    name: "Apple Inc.",
+    change: 2.4,
+    price: 182.63,
+    marketCap: "2.87T",
+    peRatio: 28.4,
+    dividend: 0.58,
+    volume: "62.3M",
+    avgVolume: "58.1M",
+    high52: 198.23,
+    low52: 143.9,
+    description:
+      "Apple Inc. designs, manufactures, and markets smartphones, personal computers, tablets, wearables, and accessories worldwide. The company offers iPhone, a line of smartphones; Mac, a line of personal computers; iPad, a line of multi-purpose tablets; and wearables, home, and accessories comprising AirPods, Apple TV, Apple Watch, Beats products, and HomePod.",
+  },
+  TSLA: {
+    ticker: "TSLA",
+    name: "Tesla Inc.",
+    change: -1.2,
+    price: 175.34,
+    marketCap: "558.2B",
+    peRatio: 50.7,
+    dividend: 0,
+    volume: "92.1M",
+    avgVolume: "103.5M",
+    high52: 278.98,
+    low52: 152.37,
+    description:
+      "Tesla, Inc. designs, develops, manufactures, leases, and sells electric vehicles, and energy generation and storage systems in the United States, China, and internationally. The company operates in two segments, Automotive, and Energy Generation and Storage.",
+  },
+  MSFT: {
+    ticker: "MSFT",
+    name: "Microsoft Corp.",
+    change: 1.8,
+    price: 417.88,
+    marketCap: "3.11T",
+    peRatio: 36.2,
+    dividend: 0.75,
+    volume: "21.5M",
+    avgVolume: "24.3M",
+    high52: 430.82,
+    low52: 309.98,
+    description:
+      "Microsoft Corporation develops, licenses, and supports software, services, devices, and solutions worldwide. The company operates in three segments: Productivity and Business Processes, Intelligent Cloud, and More Personal Computing.",
+  },
+  NVDA: {
+    ticker: "NVDA",
+    name: "NVIDIA Corp.",
+    change: 3.5,
+    price: 950.02,
+    marketCap: "2.34T",
+    peRatio: 79.8,
+    dividend: 0.04,
+    volume: "41.2M",
+    avgVolume: "45.8M",
+    high52: 974.0,
+    low52: 222.97,
+    description:
+      "NVIDIA Corporation provides graphics, and compute and networking solutions in the United States, Taiwan, China, and internationally. The company's Graphics segment offers GeForce GPUs for gaming and PCs, the GeForce NOW game streaming service and related infrastructure, and solutions for gaming platforms.",
+  },
+  AMZN: {
+    ticker: "AMZN",
+    name: "Amazon.com Inc.",
+    change: 0.9,
+    price: 178.75,
+    marketCap: "1.86T",
+    peRatio: 61.2,
+    dividend: 0,
+    volume: "32.7M",
+    avgVolume: "38.5M",
+    high52: 185.1,
+    low52: 118.35,
+    description:
+      "Amazon.com, Inc. engages in the retail sale of consumer products and subscriptions through online and physical stores in North America and internationally. It operates through three segments: North America, International, and Amazon Web Services (AWS).",
+  },
+  GOOG: {
+    ticker: "GOOG",
+    name: "Alphabet Inc.",
+    change: 1.3,
+    price: 147.6,
+    marketCap: "1.83T",
+    peRatio: 25.1,
+    dividend: 0,
+    volume: "18.9M",
+    avgVolume: "20.7M",
+    high52: 155.2,
+    low52: 104.42,
+    description:
+      "Alphabet Inc. provides various products and platforms in the United States, Europe, the Middle East, Africa, the Asia-Pacific, Canada, and Latin America. It operates through Google Services, Google Cloud, and Other Bets segments.",
+  },
+  META: {
+    ticker: "META",
+    name: "Meta Platforms Inc.",
+    change: -0.7,
+    price: 485.58,
+    marketCap: "1.24T",
+    peRatio: 28.3,
+    dividend: 0,
+    volume: "15.3M",
+    avgVolume: "16.8M",
+    high52: 531.49,
+    low52: 274.38,
+    description:
+      "Meta Platforms, Inc. engages in the development of products that enable people to connect and share with friends and family through mobile devices, personal computers, virtual reality headsets, and wearables worldwide. It operates in two segments, Family of Apps and Reality Labs.",
+  },
+}
+
+// The main component that properly unwraps params using React.use()
+export default function StockPage({ params }: StockPageProps) {
+  // Explicitly use React.use to unwrap params before accessing its properties
+  // This follows Next.js latest recommendations
+  const unwrappedParams = React.use(params as any) as { ticker: string };
+  return <StockPageContent ticker={unwrappedParams.ticker} />;
 }
 

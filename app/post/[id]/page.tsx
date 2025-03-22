@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Heart, MessageSquare, Share2, Bookmark, Repeat2, ArrowLeft } from "lucide-react"
 import { useAuth } from "@/lib/context/auth-context"
 import { supabase } from "@/lib/supabase"
+import { StockBadge } from "@/components/stock-badge"
+import { getStockDataForPost } from "@/lib/stock-utils"
 
 interface PostData {
   id: number
@@ -31,7 +33,31 @@ interface CommentData {
   created_at: string
 }
 
-export default function PostPage({ params }: { params: { id: string } }) {
+// Define type for the stock data returned from getStockDataForPost
+interface ApiStockData {
+  ticker: string;
+  price: number;
+  priceChange: number | null;
+  priceChangePercentage: number | null;
+}
+
+// Type used within this component
+interface StockData {
+  id: number;
+  ticker: string;
+  price: number;
+  price_change: number;
+  price_change_percentage: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Adding proper typing for RSC params
+type PageProps = {
+  params: { id: string }
+}
+
+function PostPageContent({ id }: { id: string }) {
   const router = useRouter()
   const { user } = useAuth()
   const [post, setPost] = useState<PostData | null>(null)
@@ -43,8 +69,10 @@ export default function PostPage({ params }: { params: { id: string } }) {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmittingLike, setIsSubmittingLike] = useState(false)
   const [isSubmittingComment, setIsSubmittingComment] = useState(false)
+  const [stockData, setStockData] = useState<StockData[]>([])
 
-  const postId = parseInt(params.id)
+  // Convert string id to number
+  const postId = parseInt(id)
 
   // Fetch post data and comments
   useEffect(() => {
@@ -91,6 +119,42 @@ export default function PostPage({ params }: { params: { id: string } }) {
 
     fetchPostData()
   }, [postId, router])
+
+  // Fetch stock data for this post
+  useEffect(() => {
+    async function fetchStockData() {
+      try {
+        console.log(`Fetching stock data for post detail ${postId}`);
+        const data = await getStockDataForPost(postId) as ApiStockData[];
+        console.log(`Received stock data for post detail ${postId}:`, data);
+
+        if (!data || data.length === 0) {
+          console.log(`No stock data found for post detail ${postId}`);
+          return;
+        }
+
+        // Generate random IDs for the stocks since we don't have real ones
+        const processedData: StockData[] = data.map((item, index) => ({
+          id: Date.now() + index, // Use timestamp + index as a unique id
+          ticker: item.ticker,
+          price: item.price,
+          price_change: item.priceChange || 0,
+          price_change_percentage: item.priceChangePercentage || 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }));
+
+        console.log(`Processed stock data for post detail ${postId}:`, processedData);
+        setStockData(processedData);
+      } catch (error) {
+        console.error(`Error fetching stock data for post detail ${postId}:`, error);
+      }
+    }
+
+    if (postId) {
+      fetchStockData();
+    }
+  }, [postId]);
 
   // Check if user has liked the post
   useEffect(() => {
@@ -266,6 +330,21 @@ export default function PostPage({ params }: { params: { id: string } }) {
           </CardHeader>
           <CardContent className="p-4 pt-0">
             <p className="mb-3 text-lg">{post.content}</p>
+            
+            {/* Stock badges */}
+            {stockData.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2 mb-3">
+                {stockData.map(stock => (
+                  <StockBadge
+                    key={stock.id}
+                    ticker={stock.ticker}
+                    price={stock.price}
+                    priceChange={stock.price_change}
+                    priceChangePercentage={stock.price_change_percentage}
+                  />
+                ))}
+              </div>
+            )}
           </CardContent>
           <CardFooter className="flex justify-between p-4 pt-0 border-t border-gray-700 mt-4">
             <Button
@@ -365,5 +444,13 @@ export default function PostPage({ params }: { params: { id: string } }) {
       </div>
     </div>
   )
+}
+
+// The main component that properly unwraps params using React.use()
+export default function PostPage({ params }: PageProps) {
+  // Explicitly use React.use to unwrap params before accessing its properties
+  // This follows Next.js latest recommendations
+  const unwrappedParams = React.use(params as any) as { id: string };
+  return <PostPageContent id={unwrappedParams.id} />;
 }
 
