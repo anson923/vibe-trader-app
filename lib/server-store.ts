@@ -216,6 +216,72 @@ export function removeCachedPost(postId: number): void {
   console.log(`Post ${postId} removed, cache now has ${serverStore.posts.length} posts`);
 }
 
+// Function to check if stock data is stale and needs refresh
+// Default expiration is 15 minutes
+export function isStockDataStale(ticker: string, maxAgeMinutes: number = 15): boolean {
+  if (!isServer) return true;
+
+  const stock = serverStore.stocks.find(s => s.ticker.toLowerCase() === ticker.toLowerCase());
+  
+  // If the stock is not in the cache, it's considered stale
+  if (!stock) return true;
+  
+  // Check if the updated_at timestamp is older than maxAgeMinutes
+  const updatedAt = new Date(stock.updated_at).getTime();
+  const now = Date.now();
+  const maxAgeMs = maxAgeMinutes * 60 * 1000;
+  
+  // If the data is older than maxAgeMinutes, it's considered stale
+  return (now - updatedAt) > maxAgeMs;
+}
+
+// Function to force refresh stock data for specific tickers
+export async function refreshStockData(tickers: string[]): Promise<CachedStock[]> {
+  if (!isServer || tickers.length === 0) return [];
+  
+  console.log(`Forcing refresh of stock data for tickers: ${tickers.join(', ')}`);
+  
+  try {
+    // Fetch fresh data from Supabase
+    const { data, error } = await supabaseAdmin
+      .from('stocks')
+      .select('*')
+      .in('ticker', tickers);
+      
+    if (error) {
+      throw error;
+    }
+    
+    if (!data || data.length === 0) {
+      console.log(`No stock data found for tickers: ${tickers.join(', ')}`);
+      return [];
+    }
+    
+    // Update the cache with fresh data
+    const refreshedStocks: CachedStock[] = [];
+    
+    for (const stock of data) {
+      const cachedStock: CachedStock = {
+        ticker: stock.ticker,
+        price: stock.price,
+        price_change: stock.price_change,
+        price_change_percentage: stock.price_change_percentage,
+        updated_at: stock.updated_at
+      };
+      
+      // Update the cache
+      updateCachedStock(cachedStock);
+      refreshedStocks.push(cachedStock);
+    }
+    
+    console.log(`Successfully refreshed ${refreshedStocks.length} stocks in cache`);
+    return refreshedStocks;
+  } catch (error) {
+    console.error('Error refreshing stock data:', error);
+    return [];
+  }
+}
+
 // Initialize cache if we're on the server
 if (isServer) {
   initializeCache().catch(err => {

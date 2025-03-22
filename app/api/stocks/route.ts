@@ -60,6 +60,7 @@ async function getBrowser(): Promise<puppeteer.Browser> {
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     let ticker = searchParams.get('ticker');
+    const forceRefresh = searchParams.get('refresh') === 'true';
 
     if (!ticker) {
         return NextResponse.json({ error: 'Ticker is required' }, { status: 400 });
@@ -80,13 +81,17 @@ export async function GET(request: Request) {
         // Process tickers in batches to balance between performance and reliability
         const results: Record<string, StockData> = {};
 
-        // First, try to get data from the database
-        for (const t of tickers) {
-            const dbData = await getStockDataFromDatabase(t);
-            if (dbData) {
-                console.log(`Using database data for ${t}`);
-                results[t] = dbData;
+        // First, try to get data from the database unless forceRefresh is true
+        if (!forceRefresh) {
+            for (const t of tickers) {
+                const dbData = await getStockDataFromDatabase(t);
+                if (dbData) {
+                    console.log(`Using database data for ${t}`);
+                    results[t] = dbData;
+                }
             }
+        } else {
+            console.log('Force refresh requested, bypassing database cache');
         }
 
         // Filter out tickers that were successfully retrieved from the database

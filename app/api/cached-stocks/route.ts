@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCachedStocks, updateCachedStock, CachedStock, initializeCache } from '@/lib/server-store';
+import { 
+  getCachedStocks, 
+  updateCachedStock, 
+  refreshStockData,
+  isStockDataStale,
+  CachedStock, 
+  initializeCache 
+} from '@/lib/server-store';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
@@ -14,8 +21,25 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const ticker = url.searchParams.get('ticker');
     const tickers = url.searchParams.get('tickers')?.split(',');
+    const forceRefresh = url.searchParams.get('refresh') === 'true';
+    
+    // Check if we need to refresh data
+    let refreshedTickers: string[] = [];
+    
+    // If specific tickers are requested with refresh=true or data is stale,
+    // force a refresh from the database
+    if (ticker && (forceRefresh || isStockDataStale(ticker))) {
+      refreshedTickers = [ticker];
+      await refreshStockData(refreshedTickers);
+    } else if (tickers && tickers.length > 0) {
+      const staleTickers = tickers.filter(t => forceRefresh || isStockDataStale(t));
+      if (staleTickers.length > 0) {
+        refreshedTickers = staleTickers;
+        await refreshStockData(staleTickers);
+      }
+    }
 
-    // Get stocks from cache
+    // Get stocks from cache (now with potentially refreshed data)
     const stocks = getCachedStocks();
 
     // Apply filters if needed
@@ -27,7 +51,11 @@ export async function GET(request: NextRequest) {
       if (!stockData) {
         return NextResponse.json({ error: 'Stock not found' }, { status: 404 });
       }
-      return NextResponse.json({ data: stockData });
+      
+      return NextResponse.json({ 
+        data: stockData,
+        refreshed: refreshedTickers.includes(ticker)
+      });
     } else if (tickers && tickers.length > 0) {
       // Return multiple stocks by tickers
       filteredStocks = stocks.filter(s => 
@@ -36,7 +64,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Return response
-    return NextResponse.json({ data: filteredStocks });
+    return NextResponse.json({ 
+      data: filteredStocks,
+      refreshed: refreshedTickers.length > 0
+    });
   } catch (error) {
     console.error('Error retrieving cached stocks:', error);
     return NextResponse.json(

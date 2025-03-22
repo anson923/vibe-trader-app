@@ -54,17 +54,21 @@ export async function fetchStockData(ticker: string): Promise<StockData | null> 
 /**
  * Fetch stock data for multiple tickers at once
  * @param tickers Array of stock ticker symbols without $ prefix
+ * @param forceRefresh Whether to force refresh data from the database
  * @returns Record of ticker to StockData mappings
  */
-export async function fetchMultipleStockData(tickers: string[]): Promise<Record<string, StockData>> {
+export async function fetchMultipleStockData(tickers: string[], forceRefresh: boolean = true): Promise<Record<string, StockData>> {
     if (tickers.length === 0) return {};
 
     try {
         // Join tickers with commas
         const tickersStr = tickers.join(',');
 
+        // Add refresh=true to force fresh data
+        const refreshParam = forceRefresh ? '&refresh=true' : '';
+
         // Use our server-side API endpoint to fetch multiple tickers at once
-        const response = await fetch(`/api/stocks?ticker=${tickersStr}`);
+        const response = await fetch(`/api/stocks?ticker=${tickersStr}${refreshParam}`);
 
         if (!response.ok) {
             const errorData = await response.json();
@@ -287,12 +291,12 @@ export async function getStockDataByTicker(ticker: string) {
             return null;
         }
 
-        // Check if data is stale (older than 5 minutes)
+        // Check if data is stale (older than 15 minutes)
         const updatedAt = new Date(data.updated_at);
         const now = new Date();
-        const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+        const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
 
-        if (updatedAt < fiveMinutesAgo) {
+        if (updatedAt < fifteenMinutesAgo) {
             return null; // Data is stale, should fetch fresh data
         }
 

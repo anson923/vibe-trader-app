@@ -157,6 +157,77 @@ export default function CreatePostPage() {
     const errors = [];
 
     try {
+      // First, check which tickers need refreshing (only refresh stale data)
+      try {
+        console.log("Checking which stock tickers need refreshing");
+        // First check which tickers are stale without forcing refresh
+        const checkResponse = await fetch(`/api/cached-stocks?tickers=${tickers.join(',')}`);
+        if (!checkResponse.ok) {
+          throw new Error(`Failed to check ticker staleness: ${checkResponse.statusText}`);
+        }
+        
+        const stocksInfo = await checkResponse.json();
+        const cachedStocks = stocksInfo.data || [];
+        
+        // Identify which tickers are missing or stale and need refresh
+        const tickersToRefresh: string[] = [];
+        
+        // Type for stock data from cache
+        type CachedStockData = {
+          ticker: string;
+          price: number;
+          price_change?: number;
+          price_change_percentage?: number;
+          updated_at: string;
+        };
+        
+        const cachedTickersMap = new Map(
+          cachedStocks.map((stock: CachedStockData) => [stock.ticker.toUpperCase(), stock])
+        );
+        
+        for (const ticker of tickers) {
+          const upperTicker = ticker.toUpperCase();
+          const cachedStock = cachedTickersMap.get(upperTicker) as CachedStockData | undefined;
+          
+          // Check if stock is missing from cache or if data is stale (older than 15 minutes)
+          if (!cachedStock) {
+            console.log(`Ticker ${ticker} not found in cache, will refresh`);
+            tickersToRefresh.push(upperTicker);
+          } else {
+            const updatedAt = new Date(cachedStock.updated_at).getTime();
+            const now = Date.now();
+            const fifteenMinutesMs = 15 * 60 * 1000;
+            
+            if ((now - updatedAt) > fifteenMinutesMs) {
+              console.log(`Ticker ${ticker} data is stale (last updated ${new Date(updatedAt).toISOString()}), will refresh`);
+              tickersToRefresh.push(upperTicker);
+            } else {
+              console.log(`Ticker ${ticker} data is fresh (last updated ${new Date(updatedAt).toISOString()}), using cached data`);
+            }
+          }
+        }
+        
+        // Only refresh tickers that need it
+        if (tickersToRefresh.length > 0) {
+          console.log(`Refreshing stale tickers: ${tickersToRefresh.join(', ')}`);
+          const refreshResponse = await fetch(`/api/cached-stocks?tickers=${tickersToRefresh.join(',')}&refresh=true`);
+          
+          if (!refreshResponse.ok) {
+            throw new Error(`Failed to refresh stale tickers: ${refreshResponse.statusText}`);
+          }
+          
+          const refreshResult = await refreshResponse.json();
+          console.log(`Successfully refreshed ${refreshResult.data?.length || 0} stale tickers`);
+          
+          // Wait a moment to ensure backend processing is complete
+          await new Promise(resolve => setTimeout(resolve, 300));
+        } else {
+          console.log('All tickers have fresh data, no refresh needed');
+        }
+      } catch (refreshError) {
+        console.warn("Failed to check/refresh stock data, will try to proceed anyway:", refreshError);
+      }
+
       // Process tickers in batches to improve efficiency while maintaining reliability
       const batchSize = 5; // Process up to 5 tickers at once for better performance
 
@@ -168,7 +239,7 @@ export default function CreatePostPage() {
 
         try {
           // Fetch data for this batch of tickers
-          const stocksData = await fetchMultipleStockData(tickerBatch);
+          const stocksData = await fetchMultipleStockData(tickerBatch, false);
 
           // Process each ticker individually
           for (const ticker of tickerBatch) {
