@@ -30,6 +30,7 @@ interface FormattedPost {
     avatar: string
     profit: number
   }
+  userId: string
   content: string
   time: string
   stats: {
@@ -68,6 +69,7 @@ export default function FeedPage() {
                 avatar: post.avatar_url || "/placeholder.svg?height=40&width=40",
                 profit: 0, // Default value since profit isn't in our posts table
               },
+              userId: post.user_id,
               content: post.content,
               time: formatTimeAgo(new Date(post.created_at)),
               stats: {
@@ -105,6 +107,7 @@ export default function FeedPage() {
               avatar: post.avatar_url || "/placeholder.svg?height=40&width=40",
               profit: 0, // Default value since profit isn't in our posts table
             },
+            userId: post.user_id,
             content: post.content,
             time: formatTimeAgo(new Date(post.created_at)),
             stats: {

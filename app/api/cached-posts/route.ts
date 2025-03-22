@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCachedPosts, updateCachedPost, CachedPost, initializeCache } from '@/lib/server-store';
+import { getCachedPosts, updateCachedPost, removeCachedPost, CachedPost, initializeCache } from '@/lib/server-store';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
@@ -89,6 +89,51 @@ export async function POST(request: NextRequest) {
     console.error('Error creating post:', error);
     return NextResponse.json(
       { error: 'Failed to create post' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE handler for deleting a post
+export async function DELETE(request: NextRequest) {
+  try {
+    // Ensure cache is initialized
+    await initializeCache();
+    
+    // Get post ID from query parameters
+    const url = new URL(request.url);
+    const postId = url.searchParams.get('id');
+    
+    if (!postId) {
+      return NextResponse.json(
+        { error: 'Post ID is required' },
+        { status: 400 }
+      );
+    }
+    
+    const numericPostId = parseInt(postId);
+    
+    // Delete from Supabase
+    const { error } = await supabaseAdmin
+      .from('posts')
+      .delete()
+      .eq('id', numericPostId);
+      
+    if (error) {
+      throw error;
+    }
+    
+    // Also remove from the cache
+    removeCachedPost(numericPostId);
+    
+    return NextResponse.json(
+      { success: true, message: `Post ${postId} deleted successfully` },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('Error deleting post:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete post' },
       { status: 500 }
     );
   }

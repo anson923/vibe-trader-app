@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/context/auth-context"
 import { supabase } from "@/lib/supabase"
 import { StockBadge } from "./stock-badge"
 import { getStockDataForPost } from "@/lib/stock-utils"
+import { DeletePostButton } from "./delete-post-button"
 
 interface PostCardProps {
   id: number
@@ -20,7 +21,9 @@ interface PostCardProps {
     username: string
     avatar: string
     profit: number
+    id?: string
   }
+  userId?: string
   content: string
   time: string
   stats: {
@@ -52,6 +55,7 @@ interface StockData {
 export default function PostCard({
   id,
   user,
+  userId,
   content,
   time,
   stats,
@@ -203,6 +207,16 @@ export default function PostCard({
             @{user.username} • {time}
           </p>
         </div>
+        
+        <DeletePostButton
+          postId={id}
+          userId={userId || ""}
+          currentUserId={currentUser?.id}
+          onSuccess={() => {
+            // Refresh the feed by refetching posts
+            window.location.reload()
+          }}
+        />
       </CardHeader>
       <CardContent className="p-4 pt-0">
         <p className="mb-3">{content}</p>

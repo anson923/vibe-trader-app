@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/context/auth-context"
 import { supabase } from "@/lib/supabase"
 import { StockBadge } from "@/components/stock-badge"
 import { getStockDataForPost } from "@/lib/stock-utils"
+import { DeletePostButton } from "@/components/delete-post-button"
 
 interface PostData {
   id: number
@@ -424,6 +425,13 @@ function PostPageContent({ id }: { id: string }) {
                 @{post.username.toLowerCase().replace(/\s+/g, '')} • {formatDate(post.created_at)}
               </p>
             </div>
+            
+            {/* Add Delete Post Button */}
+            <DeletePostButton
+              postId={postId}
+              userId={post.user_id}
+              currentUserId={user?.id}
+            />
           </CardHeader>
           <CardContent className="p-4 pt-0">
             <p className="mb-3 text-lg">{post.content}</p>

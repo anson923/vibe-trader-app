@@ -204,6 +204,18 @@ export function updateCachedStock(stock: CachedStock): void {
   }
 }
 
+// API to remove a post from the cache
+export function removeCachedPost(postId: number): void {
+  if (!isServer) return;
+  
+  console.log(`Removing post ${postId} from cache`);
+  
+  // Filter out the post with the specified ID
+  serverStore.posts = serverStore.posts.filter(post => post.id !== postId);
+  
+  console.log(`Post ${postId} removed, cache now has ${serverStore.posts.length} posts`);
+}
+
 // Initialize cache if we're on the server
 if (isServer) {
   initializeCache().catch(err => {
