@@ -95,20 +95,8 @@ function PostPageContent({ id }: { id: string }) {
           setCommentsCount(postData.comments_count || 0)
         }
 
-        // Get comments for this post
-        const { data: commentsData, error: commentsError } = await supabase
-          .from('comments')
-          .select('*')
-          .eq('post_id', postId)
-          .order('created_at', { ascending: false })
-
-        if (commentsError) {
-          throw commentsError
-        }
-
-        if (commentsData) {
-          setComments(commentsData)
-        }
+        // Get comments from cached API instead of direct Supabase query
+        await fetchComments()
       } catch (error) {
         console.error('Error fetching post data:', error)
         router.push('/')
@@ -119,6 +107,52 @@ function PostPageContent({ id }: { id: string }) {
 
     fetchPostData()
   }, [postId, router])
+
+  // Separate function to fetch comments from cached API
+  const fetchComments = async () => {
+    try {
+      // Add a cache-busting parameter to ensure we get fresh data
+      const timestamp = new Date().getTime();
+      // First try to use cached comments API
+      const response = await fetch(`/api/cached-comments?postId=${postId}&_t=${timestamp}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch comments from cached API: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.data) {
+        console.log(`Fetched ${result.data.length} comments for post ${postId}`);
+        setComments(result.data);
+        return;
+      }
+      
+      throw new Error('No data returned from cached comments API');
+    } catch (cacheError) {
+      console.warn("Couldn't use cached comments API, falling back to direct Supabase:", cacheError);
+      
+      // Fallback to direct Supabase query
+      try {
+        const { data: commentsData, error: commentsError } = await supabase
+          .from('comments')
+          .select('*')
+          .eq('post_id', postId)
+          .order('created_at', { ascending: false });
+
+        if (commentsError) {
+          throw commentsError;
+        }
+
+        if (commentsData) {
+          console.log(`Fetched ${commentsData.length} comments directly from Supabase for post ${postId}`);
+          setComments(commentsData);
+        }
+      } catch (error) {
+        console.error('Error fetching comments fallback:', error);
+      }
+    }
+  };
 
   // Fetch stock data for this post
   useEffect(() => {
@@ -230,6 +264,7 @@ function PostPageContent({ id }: { id: string }) {
     }
   }
 
+  // Handle submit comment using cached API
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -243,27 +278,89 @@ function PostPageContent({ id }: { id: string }) {
     setIsSubmittingComment(true)
 
     try {
-      // Add comment to database
-      const { data, error } = await supabase
-        .from('comments')
-        .insert({
-          post_id: postId,
-          user_id: user.id,
-          content: newComment.trim(),
-          username: user.user_metadata?.username || "Anonymous",
-          avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg?height=40&width=40"
-        })
-        .select()
+      const commentData = {
+        post_id: postId,
+        user_id: user.id,
+        content: newComment.trim(),
+        username: user.user_metadata?.username || "Anonymous",
+        avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg?height=40&width=40",
+        created_at: new Date().toISOString()
+      };
 
-      if (error) {
-        throw error
-      }
+      // First try to use the cached API endpoint
+      try {
+        const response = await fetch('/api/cached-comments', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(commentData),
+        });
 
-      if (data && data[0]) {
-        // Add new comment to the comments list
-        setComments(prev => [data[0], ...prev])
-        setCommentsCount(prev => prev + 1)
-        setNewComment("")
+        if (!response.ok) {
+          throw new Error(`Failed to add comment using cached API: ${response.status}`);
+        }
+
+        const result = await response.json();
+        
+        if (result.data) {
+          // Clear comment input first
+          setNewComment("");
+          
+          // Refresh all comments to ensure consistency
+          await fetchComments();
+          
+          // Update the comment count
+          setCommentsCount(prev => prev + 1);
+          
+          // Also update the likes count in the post
+          try {
+            await supabase
+              .from('posts')
+              .update({ comments_count: commentsCount + 1 })
+              .eq('id', postId);
+          } catch (error) {
+            console.error('Error updating post comments count:', error);
+            // Continue anyway since the comment was added successfully
+          }
+          return;
+        }
+        
+        throw new Error('No data returned from cached comments API');
+      } catch (cacheError) {
+        console.warn("Couldn't use cached API, falling back to direct Supabase:", cacheError);
+        
+        // Fallback to direct Supabase insertion
+        const { data, error } = await supabase
+          .from('comments')
+          .insert([commentData])
+          .select();
+
+        if (error) {
+          throw error;
+        }
+
+        if (data && data[0]) {
+          // Clear comment input
+          setNewComment("");
+          
+          // Refresh all comments
+          await fetchComments();
+          
+          // Update counts
+          setCommentsCount(prev => prev + 1);
+          
+          // Also update the likes count in the post
+          try {
+            await supabase
+              .from('posts')
+              .update({ comments_count: commentsCount + 1 })
+              .eq('id', postId);
+          } catch (error) {
+            console.error('Error updating post comments count:', error);
+            // Continue anyway since the comment was added successfully
+          }
+        }
       }
     } catch (error) {
       console.error('Error adding comment:', error)
