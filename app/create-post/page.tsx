@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -13,17 +13,43 @@ import { extractStockTickers, fetchMultipleStockData, saveStockData } from "@/li
 
 export default function CreatePostPage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, isLoading } = useAuth()
   const [content, setContent] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [processingStocks, setProcessingStocks] = useState(false)
   const [currentProcessingTicker, setCurrentProcessingTicker] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // Check for authentication status and redirect if not authenticated
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push("/login")
+    }
+  }, [user, isLoading, router])
+
+  // If still loading or no user, don't render the form
+  if (isLoading) {
+    return (
+      <div className="container px-4 py-6 md:px-6">
+        <div className="mx-auto max-w-2xl">
+          <div className="flex justify-center py-10">
+            <div className="animate-pulse text-gray-400">Loading...</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // If no user after loading completes, don't render the form (will redirect from useEffect)
+  if (!user) {
+    return null
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
 
+    // Double check that we have a user
     if (!user) {
       router.push("/login")
       return

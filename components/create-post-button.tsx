@@ -1,7 +1,18 @@
+'use client'
+
 import Link from "next/link"
 import { PenSquare } from "lucide-react"
+import { useAuth } from "@/lib/context/auth-context"
 
 export default function CreatePostButton() {
+  // Use the auth context to get the current user
+  const { user } = useAuth()
+
+  // If there's no user session, don't render the button
+  if (!user) {
+    return null
+  }
+
   return (
     <Link
       href="/create-post"
