@@ -10,7 +10,7 @@ import { Heart, MessageSquare, Share2, Bookmark, Repeat2, ArrowLeft } from "luci
 import { useAuth } from "@/lib/context/auth-context"
 import { supabase } from "@/lib/supabase"
 import { StockBadge } from "@/components/stock-badge"
-import { getStockDataForPost } from "@/lib/stock-utils"
+import { getStockDataForPost, logger } from "@/lib/stock-utils"
 import { DeletePostButton } from "@/components/delete-post-button"
 
 interface PostData {
@@ -71,6 +71,7 @@ function PostPageContent({ id }: { id: string }) {
   const [isSubmittingLike, setIsSubmittingLike] = useState(false)
   const [isSubmittingComment, setIsSubmittingComment] = useState(false)
   const [stockData, setStockData] = useState<StockData[]>([])
+  const [isLoadingComments, setIsLoadingComments] = useState(true)
 
   // Convert string id to number
   const postId = parseInt(id)
@@ -111,47 +112,67 @@ function PostPageContent({ id }: { id: string }) {
 
   // Separate function to fetch comments from cached API
   const fetchComments = async () => {
+    if (!postId) return;
+
+    setIsLoadingComments(true);
+    
     try {
-      // Add a cache-busting parameter to ensure we get fresh data
-      const timestamp = new Date().getTime();
-      // First try to use cached comments API
-      const response = await fetch(`/api/cached-comments?postId=${postId}&_t=${timestamp}`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch comments from cached API: ${response.status}`);
-      }
-      
-      const result = await response.json();
-      
-      if (result.data) {
-        console.log(`Fetched ${result.data.length} comments for post ${postId}`);
-        setComments(result.data);
-        return;
-      }
-      
-      throw new Error('No data returned from cached comments API');
-    } catch (cacheError) {
-      console.warn("Couldn't use cached comments API, falling back to direct Supabase:", cacheError);
-      
-      // Fallback to direct Supabase query
+      // First try to get from cached API
       try {
-        const { data: commentsData, error: commentsError } = await supabase
-          .from('comments')
-          .select('*')
-          .eq('post_id', postId)
-          .order('created_at', { ascending: false });
-
-        if (commentsError) {
-          throw commentsError;
+        const response = await fetch(`/api/cached-comments?postId=${postId}`);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch comments from cached API: ${response.statusText}`);
         }
-
-        if (commentsData) {
-          console.log(`Fetched ${commentsData.length} comments directly from Supabase for post ${postId}`);
-          setComments(commentsData);
+        
+        const result = await response.json();
+        
+        if (result.data && Array.isArray(result.data)) {
+          setComments(result.data);
+          setIsLoadingComments(false);
+          return; // Success, no need for fallback
         }
-      } catch (error) {
-        console.error('Error fetching comments fallback:', error);
+      } catch (cacheError) {
+        logger.warn(`Failed to fetch comments from cached API, falling back to direct query:`, cacheError);
+        // Continue to fallback
       }
+      
+      // Fallback to direct query
+      const { data, error } = await supabase
+        .from('comments')
+        .select(`
+          id,
+          content,
+          created_at,
+          user_id,
+          profiles:user_id (id, username, name, avatar, profit)
+        `)
+        .eq('post_id', postId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        logger.info('Comment data structure:', data[0]); // Log first comment for structure
+        
+        // Simplified mapping based on observed structure
+        const commentsData = data.map(comment => ({
+          id: comment.id,
+          content: comment.content,
+          created_at: comment.created_at,
+          user_id: comment.user_id,
+          post_id: postId as number,
+          username: comment.profiles?.name || 'User',
+          avatar_url: comment.profiles?.avatar || '/placeholder.svg'
+        }));
+        
+        setIsLoadingComments(false);
+        setComments(commentsData);
+      }
+    } catch (error) {
+      logger.error('Error fetching comments fallback:', error);
     }
   };
 
@@ -159,12 +180,13 @@ function PostPageContent({ id }: { id: string }) {
   useEffect(() => {
     async function fetchStockData() {
       try {
-        console.log(`Fetching stock data for post detail ${postId}`);
+        logger.info(`Fetching stock data for post detail ${postId}`);
+        // Using the server-managed stock data, no client-side refresh needed
         const data = await getStockDataForPost(postId) as ApiStockData[];
-        console.log(`Received stock data for post detail ${postId}:`, data);
+        logger.verbose(`Received stock data for post detail ${postId}:`, data);
 
         if (!data || data.length === 0) {
-          console.log(`No stock data found for post detail ${postId}`);
+          logger.verbose(`No stock data found for post detail ${postId}`);
           return;
         }
 
@@ -179,10 +201,10 @@ function PostPageContent({ id }: { id: string }) {
           updated_at: new Date().toISOString()
         }));
 
-        console.log(`Processed stock data for post detail ${postId}:`, processedData);
+        logger.verbose(`Processed stock data for post detail ${postId}:`, processedData);
         setStockData(processedData);
       } catch (error) {
-        console.error(`Error fetching stock data for post detail ${postId}:`, error);
+        logger.error(`Error fetching stock data for post detail ${postId}:`, error);
       }
     }
 
@@ -210,7 +232,7 @@ function PostPageContent({ id }: { id: string }) {
 
         setLiked(!!data)
       } catch (error) {
-        console.error('Error checking like status:', error)
+        logger.error('Error checking like status:', error)
       }
     }
 

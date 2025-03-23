@@ -6,6 +6,15 @@ import LeftNavigation from "@/components/left-navigation"
 import MobileNavigation from "@/components/mobile-navigation"
 import CreatePostButton from "@/components/create-post-button"
 import { AuthProvider } from "@/lib/context/auth-context"
+import { setLogLevel } from "@/lib/stock-utils"
+
+// Set log level based on environment
+if (process.env.NODE_ENV === 'production') {
+  setLogLevel('error'); // Only errors in production
+} else {
+  // In development, use 'error' for cleaner logs, or change to 'info' or 'verbose' for debugging
+  setLogLevel('error'); 
+}
 
 const inter = Inter({ subsets: ["latin"] })
 

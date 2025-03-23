@@ -10,6 +10,59 @@ interface StockData {
     error?: string;
 }
 
+// Client-side in-memory caches
+const postStockCache: Record<number, {
+  data: any[];
+  timestamp: number;
+}> = {};
+
+const tickerStockCache: Record<string, {
+  data: any;
+  timestamp: number;
+}> = {};
+
+const multiStockCache: Record<string, {
+  data: any[];
+  timestamp: number;
+}> = {};
+
+// Log level control
+let LOG_LEVEL = 'error'; // Possible values: 'verbose', 'info', 'warn', 'error', 'none'
+
+// Custom logging functions with log level control
+const logger = {
+  verbose: (message: string, ...args: any[]) => {
+    if (['verbose'].includes(LOG_LEVEL)) {
+      console.log(message, ...args);
+    }
+  },
+  info: (message: string, ...args: any[]) => {
+    if (['verbose', 'info'].includes(LOG_LEVEL)) {
+      console.log(message, ...args);
+    }
+  },
+  warn: (message: string, ...args: any[]) => {
+    if (['verbose', 'info', 'warn'].includes(LOG_LEVEL)) {
+      console.warn(message, ...args);
+    }
+  },
+  error: (message: string, ...args: any[]) => {
+    if (['verbose', 'info', 'warn', 'error'].includes(LOG_LEVEL)) {
+      console.error(message, ...args);
+    }
+  },
+  // Enable all logs temporarily (for debugging)
+  enableVerbose: () => { LOG_LEVEL = 'verbose'; },
+  // Default level - only errors
+  enableErrorOnly: () => { LOG_LEVEL = 'error'; },
+  // Disable all logs
+  disableAll: () => { LOG_LEVEL = 'none'; },
+  // Enable info level
+  enableInfo: () => { LOG_LEVEL = 'info'; },
+};
+
+const CACHE_TTL = 60 * 1000; // 60 seconds cache TTL
+
 /**
  * Extract stock tickers from post content
  * Looks for $SYMBOL pattern in the text
@@ -52,35 +105,160 @@ export async function fetchStockData(ticker: string): Promise<StockData | null> 
 }
 
 /**
- * Fetch stock data for multiple tickers at once
- * @param tickers Array of stock ticker symbols without $ prefix
- * @param forceRefresh Whether to force refresh data from the database
- * @returns Record of ticker to StockData mappings
+ * Get stored stock data for a ticker
+ * Uses cached API with fallback to direct Supabase query
+ * No longer checks for stale data as server background job handles updates
+ * Implements client-side caching to prevent duplicate fetches
  */
-export async function fetchMultipleStockData(tickers: string[], forceRefresh: boolean = true): Promise<Record<string, StockData>> {
-    if (tickers.length === 0) return {};
-
+export async function getStockDataByTicker(ticker: string) {
     try {
-        // Join tickers with commas
-        const tickersStr = tickers.join(',');
+        // Check client-side cache first
+        const now = Date.now();
+        const cachedData = tickerStockCache[ticker];
+        
+        if (cachedData && (now - cachedData.timestamp < CACHE_TTL)) {
+            logger.verbose(`Using cached stock data for ticker ${ticker} (${((now - cachedData.timestamp) / 1000).toFixed(1)}s old)`);
+            return cachedData.data;
+        }
+        
+        logger.verbose(`Fetching stock data for ticker ${ticker} (using server-managed cache, no refresh checks)`);
+        
+        // First try to get the stock from cached API
+        try {
+            const response = await fetch(`/api/cached-stocks?ticker=${ticker}`);
+            
+            if (!response.ok) {
+                throw new Error(`Failed to fetch stock from cached API: ${response.statusText}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.data) {
+                const stockData = result.data;
+                
+                // Just log the "freshness" of the data but don't take action
+                const updatedAt = new Date(stockData.updated_at);
+                const ageInMinutes = Math.floor((now - updatedAt.getTime()) / (60 * 1000));
+                
+                logger.verbose(`Stock data for ${ticker} is ${ageInMinutes > 15 ? `${ageInMinutes} minutes old (server worker will refresh soon)` : 'fresh'}`);
+                
+                const formattedData = {
+                    ticker: stockData.ticker,
+                    price: stockData.price,
+                    priceChange: stockData.price_change,
+                    priceChangePercentage: stockData.price_change_percentage
+                };
+                
+                // Store in client-side cache
+                tickerStockCache[ticker] = {
+                    data: formattedData,
+                    timestamp: now
+                };
+                
+                return formattedData;
+            }
+        } catch (cacheError) {
+            logger.warn(`Failed to fetch stock from cached API, falling back to direct query:`, cacheError);
+            // Continue to fallback
+        }
+        
+        // FALLBACK: Direct Supabase query if cached API fails
+        const { data, error } = await supabase
+            .from('stocks')
+            .select('*')
+            .eq('ticker', ticker)
+            .single();
 
-        // Add refresh=true to force fresh data
-        const refreshParam = forceRefresh ? '&refresh=true' : '';
-
-        // Use our server-side API endpoint to fetch multiple tickers at once
-        const response = await fetch(`/api/stocks?ticker=${tickersStr}${refreshParam}`);
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error(`API error for multiple tickers:`, errorData);
-            return {};
+        if (error) {
+            logger.error(`Error fetching stock data for ticker ${ticker}:`, error);
+            return null;
         }
 
-        const data = await response.json();
-        return data;
+        // Log data age but don't force refresh - server worker handles updates
+        const updatedAt = new Date(data.updated_at);
+        const ageInMinutes = Math.floor((now - updatedAt.getTime()) / (60 * 1000));
+        
+        logger.verbose(`Stock data for ${ticker} is ${ageInMinutes > 15 ? `${ageInMinutes} minutes old (server worker will refresh soon)` : 'fresh'}`);
+        
+        const formattedData = {
+            ticker: data.ticker,
+            price: data.price,
+            priceChange: data.price_change,
+            priceChangePercentage: data.price_change_percentage
+        };
+        
+        // Store in client-side cache
+        tickerStockCache[ticker] = {
+            data: formattedData,
+            timestamp: now
+        };
+        
+        return formattedData;
     } catch (error) {
-        console.error(`Error fetching stock data for multiple tickers:`, error);
-        return {};
+        logger.error(`Failed to fetch stock data for ticker ${ticker}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Fetch multiple stock data items by their tickers
+ * Uses cached stocks API with no refresh forcing
+ * Implements client-side caching to prevent duplicate fetches
+ */
+export async function fetchMultipleStockData(tickers: string[]) {
+    if (!tickers || tickers.length === 0) {
+        logger.warn('No tickers provided to fetchMultipleStockData');
+        return [];
+    }
+    
+    try {
+        // Generate a cache key based on the sorted unique tickers
+        const uniqueTickers = [...new Set(tickers)].sort();
+        const cacheKey = uniqueTickers.join(',');
+        
+        // Check client-side cache first
+        const now = Date.now();
+        const cachedData = multiStockCache[cacheKey];
+        
+        if (cachedData && (now - cachedData.timestamp < CACHE_TTL)) {
+            logger.verbose(`Using cached data for multiple tickers: ${cacheKey} (${((now - cachedData.timestamp) / 1000).toFixed(1)}s old)`);
+            return cachedData.data;
+        }
+        
+        logger.verbose(`Fetching data for multiple tickers: ${uniqueTickers.join(", ")} (using server-managed cache, no refresh)`);
+        
+        const tickersParam = uniqueTickers.join(',');
+        
+        const response = await fetch(`/api/cached-stocks?tickers=${tickersParam}`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch stock data: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (!result.data) {
+            logger.error('No data returned from API for tickers:', uniqueTickers);
+            return [];
+        }
+        
+        const formattedData = result.data.map((stock: any) => ({
+            ticker: stock.ticker,
+            price: stock.price,
+            priceChange: stock.price_change,
+            priceChangePercentage: stock.price_change_percentage
+        }));
+        
+        // Store in client-side cache
+        multiStockCache[cacheKey] = {
+            data: formattedData,
+            timestamp: now
+        };
+        
+        return formattedData;
+    } catch (error) {
+        logger.error('Error in fetchMultipleStockData:', error);
+        return [];
     }
 }
 
@@ -89,7 +267,7 @@ export async function fetchMultipleStockData(tickers: string[], forceRefresh: bo
  */
 export async function saveStockData(postId: number, stockData: StockData) {
     try {
-        console.log(`Saving stock data for ${stockData.ticker} for post ${postId}`);
+        logger.info(`Saving stock data for ${stockData.ticker} for post ${postId}`);
 
         // Save/update the stock data in the stocks table (without post_id)
         const stockRecord = {
@@ -107,16 +285,16 @@ export async function saveStockData(postId: number, stockData: StockData) {
             .select();
 
         if (stockError) {
-            console.error('Error saving stock data:', stockError);
+            logger.error('Error saving stock data:', stockError);
             throw stockError;
         }
 
-        console.log(`Successfully saved/updated stock data for ticker ${stockData.ticker}`);
+        logger.info(`Successfully saved/updated stock data for ticker ${stockData.ticker}`);
 
         // Return the saved stock data
         return stockData2;
     } catch (error) {
-        console.error('Failed to save stock data:', error);
+        logger.error('Failed to save stock data:', error);
         throw error;
     }
 }
@@ -124,10 +302,20 @@ export async function saveStockData(postId: number, stockData: StockData) {
 /**
  * Get stored stock data for a post
  * Uses cached API endpoints with fallback to direct Supabase queries
+ * Implements client-side caching to prevent duplicate fetches
  */
 export async function getStockDataForPost(postId: number) {
     try {
-        console.log(`Fetching stock data for post ${postId}`);
+        // Check client-side cache first
+        const now = Date.now();
+        const cachedData = postStockCache[postId];
+        
+        if (cachedData && (now - cachedData.timestamp < CACHE_TTL)) {
+            logger.verbose(`Using cached stock data for post ${postId} (${((now - cachedData.timestamp) / 1000).toFixed(1)}s old)`);
+            return cachedData.data;
+        }
+        
+        logger.info(`Fetching stock data for post ${postId}`);
 
         // 1. First try to get the post from cached API
         try {
@@ -144,10 +332,10 @@ export async function getStockDataForPost(postId: number) {
                 
                 // Make sure tickers is an array
                 const tickers = Array.isArray(postData.tickers) ? postData.tickers : [];
-                console.log(`Post ${postId} has tickers:`, tickers);
+                logger.verbose(`Post ${postId} has tickers:`, tickers);
                 
                 if (tickers.length === 0) {
-                    console.log(`No tickers found for post ${postId}`);
+                    logger.verbose(`No tickers found for post ${postId}`);
                     return [];
                 }
                 
@@ -163,7 +351,7 @@ export async function getStockDataForPost(postId: number) {
                     
                     if (stocksResult.data && Array.isArray(stocksResult.data)) {
                         const stocksData = stocksResult.data;
-                        console.log(`Found ${stocksData.length} stock records for post ${postId}:`, stocksData);
+                        logger.verbose(`Found ${stocksData.length} stock records for post ${postId}`);
                         
                         // Map the records to the expected format
                         const formattedData = stocksData.map((stock: { 
@@ -178,16 +366,23 @@ export async function getStockDataForPost(postId: number) {
                             priceChangePercentage: stock.price_change_percentage
                         }));
                         
-                        console.log(`Formatted stock data for post ${postId}:`, formattedData);
+                        logger.verbose(`Formatted stock data for post ${postId}`);
+                        
+                        // Store in client-side cache
+                        postStockCache[postId] = {
+                            data: formattedData,
+                            timestamp: Date.now()
+                        };
+                        
                         return formattedData;
                     }
                 } catch (stocksError) {
-                    console.warn(`Failed to fetch stocks from cached API, falling back to direct query:`, stocksError);
+                    logger.warn(`Failed to fetch stocks from cached API, falling back to direct query:`, stocksError);
                     // Continue to fallback
                 }
             }
         } catch (postError) {
-            console.warn(`Failed to fetch post from cached API, falling back to direct query:`, postError);
+            logger.warn(`Failed to fetch post from cached API, falling back to direct query:`, postError);
             // Continue to fallback
         }
         
@@ -201,16 +396,16 @@ export async function getStockDataForPost(postId: number) {
             .single();
 
         if (postError) {
-            console.error(`Error fetching post data for post ${postId}:`, postError);
+            logger.error(`Error fetching post data for post ${postId}:`, postError);
             throw postError;
         }
 
         // Make sure tickers is an array
         const tickers = Array.isArray(postData.tickers) ? postData.tickers : [];
-        console.log(`Post ${postId} has tickers:`, tickers);
+        logger.verbose(`Post ${postId} has tickers:`, tickers);
 
         if (tickers.length === 0) {
-            console.log(`No tickers found for post ${postId}`);
+            logger.verbose(`No tickers found for post ${postId}`);
             return [];
         }
 
@@ -221,11 +416,11 @@ export async function getStockDataForPost(postId: number) {
             .in('ticker', tickers);
 
         if (stocksError) {
-            console.error(`Error fetching stock data for tickers ${tickers.join(', ')}:`, stocksError);
+            logger.error(`Error fetching stock data for tickers ${tickers.join(', ')}:`, stocksError);
             throw stocksError;
         }
 
-        console.log(`Found ${stocksData.length} stock records for post ${postId}:`, stocksData);
+        logger.verbose(`Found ${stocksData.length} stock records for post ${postId}`);
 
         // Map the database records to the expected format
         const formattedData = stocksData.map((stock: { 
@@ -240,75 +435,18 @@ export async function getStockDataForPost(postId: number) {
             priceChangePercentage: stock.price_change_percentage
         }));
 
-        console.log(`Formatted stock data for post ${postId}:`, formattedData);
+        logger.verbose(`Formatted stock data for post ${postId}`);
+        
+        // Store in client-side cache
+        postStockCache[postId] = {
+            data: formattedData,
+            timestamp: Date.now()
+        };
 
         return formattedData;
     } catch (error) {
-        console.error(`Failed to fetch stock data for post ${postId}:`, error);
+        logger.error(`Failed to fetch stock data for post ${postId}:`, error);
         return [];
-    }
-}
-
-/**
- * Get stored stock data for a ticker
- * Uses cached API with fallback to direct Supabase query
- */
-export async function getStockDataByTicker(ticker: string) {
-    try {
-        // First try to get the stock from cached API
-        try {
-            const response = await fetch(`/api/cached-stocks?ticker=${ticker}`);
-            
-            if (!response.ok) {
-                throw new Error(`Failed to fetch stock from cached API: ${response.statusText}`);
-            }
-            
-            const result = await response.json();
-            
-            if (result.data) {
-                const stockData = result.data;
-                return {
-                    ticker: stockData.ticker,
-                    price: stockData.price,
-                    priceChange: stockData.price_change,
-                    priceChangePercentage: stockData.price_change_percentage
-                };
-            }
-        } catch (cacheError) {
-            console.warn(`Failed to fetch stock from cached API, falling back to direct query:`, cacheError);
-            // Continue to fallback
-        }
-        
-        // FALLBACK: Direct Supabase query if cached API fails
-        const { data, error } = await supabase
-            .from('stocks')
-            .select('*')
-            .eq('ticker', ticker)
-            .single();
-
-        if (error) {
-            console.error(`Error fetching stock data for ticker ${ticker}:`, error);
-            return null;
-        }
-
-        // Check if data is stale (older than 15 minutes)
-        const updatedAt = new Date(data.updated_at);
-        const now = new Date();
-        const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
-
-        if (updatedAt < fifteenMinutesAgo) {
-            return null; // Data is stale, should fetch fresh data
-        }
-
-        return {
-            ticker: data.ticker,
-            price: data.price,
-            priceChange: data.price_change,
-            priceChangePercentage: data.price_change_percentage
-        };
-    } catch (error) {
-        console.error(`Failed to fetch stock data for ticker ${ticker}:`, error);
-        return null;
     }
 }
 
@@ -318,7 +456,7 @@ export async function getStockDataByTicker(ticker: string) {
  */
 export async function updatePostTickers(postId: number, tickers: string[]) {
     try {
-        console.log(`Updating tickers for post ${postId}:`, tickers);
+        logger.info(`Updating tickers for post ${postId}:`, tickers);
 
         // Make sure we have unique tickers
         const uniqueTickers = [...new Set(tickers)].sort();
@@ -329,14 +467,44 @@ export async function updatePostTickers(postId: number, tickers: string[]) {
             .eq('id', postId);
 
         if (error) {
-            console.error(`Error updating tickers for post ${postId}:`, error);
+            logger.error(`Error updating tickers for post ${postId}:`, error);
             throw error;
         }
 
-        console.log(`Successfully updated tickers for post ${postId}:`, uniqueTickers);
+        logger.info(`Successfully updated tickers for post ${postId}:`, uniqueTickers);
         return uniqueTickers;
     } catch (error) {
-        console.error(`Failed to update tickers for post ${postId}:`, error);
+        logger.error(`Failed to update tickers for post ${postId}:`, error);
         throw error;
     }
-} 
+}
+
+// Export type for log levels
+export type LogLevel = 'verbose' | 'info' | 'warn' | 'error' | 'none';
+
+// Utility function to set log level based on environment
+export function setLogLevel(level: LogLevel): void {
+  LOG_LEVEL = level;
+  if (level !== 'none') {
+    logger.info(`Log level set to: ${level}`);
+  }
+}
+
+// Debug utility function to temporarily enable verbose logs 
+// for a specific operation, then restore previous level
+export async function withVerboseLogs<T>(operation: () => Promise<T>): Promise<T> {
+  const previousLevel = LOG_LEVEL;
+  LOG_LEVEL = 'verbose';
+  
+  try {
+    return await operation();
+  } finally {
+    LOG_LEVEL = previousLevel;
+  }
+}
+
+// Override console log level - set to error-only by default
+logger.enableErrorOnly();
+
+// Export the logger for external use
+export { logger }; 

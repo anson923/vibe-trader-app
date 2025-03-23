@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/context/auth-context"
 import { supabase } from "@/lib/supabase"
 import { StockBadge } from "./stock-badge"
-import { getStockDataForPost } from "@/lib/stock-utils"
+import { getStockDataForPost, logger } from "@/lib/stock-utils"
 import { DeletePostButton } from "./delete-post-button"
 
 interface PostCardProps {
@@ -73,12 +73,13 @@ export default function PostCard({
   useEffect(() => {
     async function fetchStockData() {
       try {
-        console.log(`Fetching stock data for post ${id}`);
+        logger.info(`Fetching stock data for post ${id}`);
+        // Using the server-managed stock data, no client-side refresh
         const data = await getStockDataForPost(id) as ApiStockData[];
-        console.log(`Received stock data for post ${id}:`, data);
+        logger.verbose(`Received stock data for post ${id}:`, data);
 
         if (!data || data.length === 0) {
-          console.log(`No stock data found for post ${id}`);
+          logger.verbose(`No stock data found for post ${id}`);
           return;
         }
 
@@ -93,10 +94,10 @@ export default function PostCard({
           updated_at: new Date().toISOString()
         }));
 
-        console.log(`Processed stock data for post ${id}:`, processedData);
+        logger.verbose(`Processed stock data for post ${id}:`, processedData);
         setStockData(processedData);
       } catch (error) {
-        console.error(`Error fetching stock data for post ${id}:`, error);
+        logger.error(`Error fetching stock data for post ${id}:`, error);
       }
     }
 
@@ -122,7 +123,7 @@ export default function PostCard({
 
         setLiked(!!data)
       } catch (error) {
-        console.error('Error checking like status:', error)
+        logger.error('Error checking like status:', error)
       }
     }
 
@@ -173,7 +174,7 @@ export default function PostCard({
         setLikesCount(prev => prev + 1)
       }
     } catch (error) {
-      console.error('Error toggling like:', error)
+      logger.error('Error toggling like:', error)
     } finally {
       setIsSubmitting(false)
     }

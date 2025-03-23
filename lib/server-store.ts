@@ -216,30 +216,11 @@ export function removeCachedPost(postId: number): void {
   console.log(`Post ${postId} removed, cache now has ${serverStore.posts.length} posts`);
 }
 
-// Function to check if stock data is stale and needs refresh
-// Default expiration is 15 minutes
-export function isStockDataStale(ticker: string, maxAgeMinutes: number = 15): boolean {
-  if (!isServer) return true;
-
-  const stock = serverStore.stocks.find(s => s.ticker.toLowerCase() === ticker.toLowerCase());
-  
-  // If the stock is not in the cache, it's considered stale
-  if (!stock) return true;
-  
-  // Check if the updated_at timestamp is older than maxAgeMinutes
-  const updatedAt = new Date(stock.updated_at).getTime();
-  const now = Date.now();
-  const maxAgeMs = maxAgeMinutes * 60 * 1000;
-  
-  // If the data is older than maxAgeMinutes, it's considered stale
-  return (now - updatedAt) > maxAgeMs;
-}
-
-// Function to force refresh stock data for specific tickers
+// Function to refresh stock data for specific tickers
 export async function refreshStockData(tickers: string[]): Promise<CachedStock[]> {
   if (!isServer || tickers.length === 0) return [];
   
-  console.log(`Forcing refresh of stock data for tickers: ${tickers.join(', ')}`);
+  console.log(`Refreshing stock data for tickers: ${tickers.join(', ')}`);
   
   try {
     // Fetch fresh data from Supabase

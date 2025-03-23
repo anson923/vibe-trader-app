@@ -2,44 +2,46 @@ import { NextRequest, NextResponse } from 'next/server';
 import { 
   getCachedStocks, 
   updateCachedStock, 
-  refreshStockData,
-  isStockDataStale,
   CachedStock, 
   initializeCache 
 } from '@/lib/server-store';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { initializeServer, isServerInitialized } from '@/lib/server-init';
 
+// Use Incremental Static Regeneration with 60-second revalidation
+export const revalidate = 60;
+
+// Make route dynamic to ensure we always revalidate
 export const dynamic = 'force-dynamic';
+
+// Specify Node.js runtime to avoid Edge Runtime issues
+export const runtime = 'nodejs';
 
 // GET handler for retrieving cached stocks
 export async function GET(request: NextRequest) {
   try {
-    // Ensure cache is initialized
+    // Ensure server is initialized
+    if (!isServerInitialized()) {
+      try {
+        console.log('Initializing server from cached-stocks API route...');
+        await initializeServer();
+      } catch (error) {
+        console.error('Failed to initialize server during cached-stocks API request:', error);
+        // Continue anyway as we'll try to initialize cache directly
+      }
+    }
+
+    // Ensure cache is initialized (should have happened during server init)
     await initializeCache();
     
     // Get query parameters
     const url = new URL(request.url);
     const ticker = url.searchParams.get('ticker');
     const tickers = url.searchParams.get('tickers')?.split(',');
-    const forceRefresh = url.searchParams.get('refresh') === 'true';
+    const page = Number(url.searchParams.get('page') || '1');
+    const pageSize = Number(url.searchParams.get('pageSize') || '20');
     
-    // Check if we need to refresh data
-    let refreshedTickers: string[] = [];
-    
-    // If specific tickers are requested with refresh=true or data is stale,
-    // force a refresh from the database
-    if (ticker && (forceRefresh || isStockDataStale(ticker))) {
-      refreshedTickers = [ticker];
-      await refreshStockData(refreshedTickers);
-    } else if (tickers && tickers.length > 0) {
-      const staleTickers = tickers.filter(t => forceRefresh || isStockDataStale(t));
-      if (staleTickers.length > 0) {
-        refreshedTickers = staleTickers;
-        await refreshStockData(staleTickers);
-      }
-    }
-
-    // Get stocks from cache (now with potentially refreshed data)
+    // Get stocks from cache
     const stocks = getCachedStocks();
 
     // Apply filters if needed
@@ -53,20 +55,37 @@ export async function GET(request: NextRequest) {
       }
       
       return NextResponse.json({ 
-        data: stockData,
-        refreshed: refreshedTickers.includes(ticker)
+        data: stockData
       });
     } else if (tickers && tickers.length > 0) {
       // Return multiple stocks by tickers
       filteredStocks = stocks.filter(s => 
         tickers.some(t => t.toLowerCase() === s.ticker.toLowerCase())
       );
+    } else {
+      // Paginate the results
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      
+      filteredStocks = stocks
+        .sort((a, b) => a.ticker.localeCompare(b.ticker))
+        .slice(startIndex, endIndex);
+      
+      // Return response with pagination info
+      return NextResponse.json({ 
+        data: filteredStocks,
+        pagination: {
+          page,
+          pageSize,
+          total: stocks.length,
+          totalPages: Math.ceil(stocks.length / pageSize)
+        }
+      });
     }
 
-    // Return response
+    // Return filtered stocks list
     return NextResponse.json({ 
-      data: filteredStocks,
-      refreshed: refreshedTickers.length > 0
+      data: filteredStocks
     });
   } catch (error) {
     console.error('Error retrieving cached stocks:', error);
