@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { supabaseAdmin } from './supabase-admin';
 import * as puppeteer from 'puppeteer';
+import { isStockDataStale, isMarketOpen, getMarketClosedReason } from './stock-utils';
 
 // Define types for stock data
 interface StockData {
@@ -416,7 +417,7 @@ async function fetchStockDataFallback(tickers: string[]): Promise<Record<string,
 }
 
 /**
- * Process all stocks by loading tickers from ticker file
+ * Main processing function responsible for fetching all stock tickers
  * and updating them in batches to avoid rate limiting
  */
 async function processAllStocks() {
@@ -433,6 +434,21 @@ async function processAllStocks() {
         
         console.log(`Loaded ${allTickers.length} tickers from ticker file`);
         
+        // Check market hours first
+        const marketOpen = isMarketOpen();
+        if (marketOpen) {
+            console.log(`Market status: OPEN - Normal trading hours in session`);
+        } else {
+            const closedReason = getMarketClosedReason();
+            console.log(`Market status: CLOSED - ${closedReason}`);
+        }
+        
+        // If market is closed, we might want to skip updates entirely or use a longer interval
+        if (!marketOpen) {
+            console.log('Market is currently closed. Stock prices will not change significantly.');
+            console.log('Only updating stocks that have never been fetched or are extremely outdated.');
+        }
+        
         // Check which stocks need updating (expired after 15 minutes)
         const { data: currentStocks } = await supabaseAdmin
             .from('stocks')
@@ -445,8 +461,7 @@ async function processAllStocks() {
             stockMap.set(stock.ticker, new Date(stock.updated_at));
         });
         
-        // Determine which tickers are expired (older than 15 minutes)
-        // Using UTC timestamps to avoid timezone issues
+        // Determine which tickers are expired considering market hours
         const now = new Date();
         const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
         
@@ -459,7 +474,7 @@ async function processAllStocks() {
         for (const ticker of allTickers) {
             const lastUpdated = stockMap.get(ticker);
             
-            // If stock doesn't exist or is older than 15 minutes, it's expired
+            // If stock doesn't exist, we need to fetch it regardless of market hours
             if (!lastUpdated) {
                 console.log(`Ticker ${ticker} not found in database, will fetch`);
                 expiredTickers.push(ticker);
@@ -467,19 +482,33 @@ async function processAllStocks() {
                 // Log the comparison to help debug
                 const millisSinceUpdate = now.getTime() - lastUpdated.getTime();
                 const minutesSinceUpdate = Math.floor(millisSinceUpdate / (60 * 1000));
+                const hoursSinceUpdate = (millisSinceUpdate / (60 * 60 * 1000)).toFixed(1);
                 
-                if (lastUpdated < fifteenMinutesAgo) {
-                    console.log(`Ticker ${ticker} expired - last updated ${minutesSinceUpdate} minutes ago at ${lastUpdated.toISOString()}`);
+                // Use the isStockDataStale function which considers market hours
+                const isStale = isStockDataStale(lastUpdated);
+                
+                if (isStale) {
+                    console.log(`Ticker ${ticker} expired - last updated ${minutesSinceUpdate} minutes ago at ${lastUpdated.toISOString()}, market is ${marketOpen ? 'open' : 'closed'}`);
                     expiredTickers.push(ticker);
                 } else {
-                    console.log(`Ticker ${ticker} still valid - last updated ${minutesSinceUpdate} minutes ago at ${lastUpdated.toISOString()}`);
-                    validTickers.push(ticker);
+                    // If market is closed and data is older than 12 hours, update anyway for consistency
+                    if (!marketOpen && millisSinceUpdate > 12 * 60 * 60 * 1000) {
+                        console.log(`Ticker ${ticker} is ${hoursSinceUpdate} hours old (> 12 hours), updating despite closed market`);
+                        expiredTickers.push(ticker);
+                    } else {
+                        if (marketOpen) {
+                            console.log(`Ticker ${ticker} still valid - last updated ${minutesSinceUpdate} minutes ago`);
+                        } else {
+                            console.log(`Ticker ${ticker} data from ${hoursSinceUpdate} hours ago is still valid - market is closed: ${getMarketClosedReason()}`);
+                        }
+                        validTickers.push(ticker);
+                    }
                 }
             }
         }
         
         if (validTickers.length > 0) {
-            console.log(`Skipping ${validTickers.length} valid tickers still within 15-minute window: ${validTickers.join(', ')}`);
+            console.log(`Skipping ${validTickers.length} valid tickers: ${validTickers.join(', ')}`);
         }
         
         if (expiredTickers.length === 0) {

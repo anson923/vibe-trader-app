@@ -105,6 +105,171 @@ export async function fetchStockData(ticker: string): Promise<StockData | null> 
 }
 
 /**
+ * Check if current time is within US market hours
+ * Market hours are 9:30 AM to 4:00 PM ET (14:30 to 21:00 UTC)
+ * Returns an object with isOpen status and reason if closed
+ */
+export function getMarketStatus(): { isOpen: boolean; reason?: string } {
+  const now = new Date();
+  const utcHour = now.getUTCHours();
+  const utcMinutes = now.getUTCMinutes();
+  const dayOfWeek = now.getUTCDay(); // 0 is Sunday, 6 is Saturday
+  
+  // Weekend check
+  if (dayOfWeek === 0) {
+    return { isOpen: false, reason: 'WEEKEND_SUNDAY' };
+  }
+  
+  if (dayOfWeek === 6) {
+    return { isOpen: false, reason: 'WEEKEND_SATURDAY' };
+  }
+  
+  // US holidays (could be expanded with a more complete list)
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth(); // 0-indexed
+  const date = now.getUTCDate();
+  
+  // Check for common US market holidays
+  // New Year's Day (or observed day)
+  if (month === 0 && date === 1) {
+    return { isOpen: false, reason: 'HOLIDAY_NEW_YEARS_DAY' };
+  }
+  
+  // Martin Luther King Jr. Day (third Monday in January)
+  if (month === 0 && dayOfWeek === 1 && date >= 15 && date <= 21) {
+    return { isOpen: false, reason: 'HOLIDAY_MLK_DAY' };
+  }
+  
+  // Presidents Day (third Monday in February)
+  if (month === 1 && dayOfWeek === 1 && date >= 15 && date <= 21) {
+    return { isOpen: false, reason: 'HOLIDAY_PRESIDENTS_DAY' };
+  }
+  
+  // Good Friday (would need more complex calculation - simplified)
+  // Memorial Day (last Monday in May)
+  if (month === 4 && dayOfWeek === 1 && date >= 25 && date <= 31) {
+    return { isOpen: false, reason: 'HOLIDAY_MEMORIAL_DAY' };
+  }
+  
+  // Juneteenth (June 19)
+  if (month === 5 && date === 19) {
+    return { isOpen: false, reason: 'HOLIDAY_JUNETEENTH' };
+  }
+  
+  // Independence Day (July 4, or observed day)
+  if (month === 6 && date === 4) {
+    return { isOpen: false, reason: 'HOLIDAY_INDEPENDENCE_DAY' };
+  }
+  
+  // Labor Day (first Monday in September)
+  if (month === 8 && dayOfWeek === 1 && date <= 7) {
+    return { isOpen: false, reason: 'HOLIDAY_LABOR_DAY' };
+  }
+  
+  // Thanksgiving Day (fourth Thursday in November)
+  if (month === 10 && dayOfWeek === 4 && date >= 22 && date <= 28) {
+    return { isOpen: false, reason: 'HOLIDAY_THANKSGIVING' };
+  }
+  
+  // Christmas Day (December 25, or observed day)
+  if (month === 11 && date === 25) {
+    return { isOpen: false, reason: 'HOLIDAY_CHRISTMAS' };
+  }
+  
+  // Convert current time to minutes since midnight UTC
+  const currentTimeInMinutes = utcHour * 60 + utcMinutes;
+  
+  // Market opens at 14:30 UTC (9:30 AM ET) and closes at 21:00 UTC (4:00 PM ET)
+  const marketOpenInMinutes = 14 * 60 + 30;
+  const marketCloseInMinutes = 21 * 60;
+  
+  if (currentTimeInMinutes < marketOpenInMinutes) {
+    return { isOpen: false, reason: 'BEFORE_MARKET_HOURS' };
+  }
+  
+  if (currentTimeInMinutes >= marketCloseInMinutes) {
+    return { isOpen: false, reason: 'AFTER_MARKET_HOURS' };
+  }
+  
+  return { isOpen: true };
+}
+
+/**
+ * Check if current time is within US market hours
+ * Simplified version that just returns boolean
+ */
+export function isMarketOpen(): boolean {
+  return getMarketStatus().isOpen;
+}
+
+/**
+ * Get a human-readable explanation for why market is closed
+ */
+export function getMarketClosedReason(): string {
+  const { isOpen, reason } = getMarketStatus();
+  
+  if (isOpen) {
+    return 'Market is open';
+  }
+  
+  // Return human-readable explanations
+  switch (reason) {
+    case 'WEEKEND_SATURDAY':
+      return 'Market is closed for weekend (Saturday)';
+    case 'WEEKEND_SUNDAY':
+      return 'Market is closed for weekend (Sunday)';
+    case 'BEFORE_MARKET_HOURS':
+      return 'Market is closed - before trading hours (opens 9:30 AM ET)';
+    case 'AFTER_MARKET_HOURS':
+      return 'Market is closed - after trading hours (closes 4:00 PM ET)';
+    case 'HOLIDAY_NEW_YEARS_DAY':
+      return 'Market is closed for New Year\'s Day holiday';
+    case 'HOLIDAY_MLK_DAY':
+      return 'Market is closed for Martin Luther King Jr. Day holiday';
+    case 'HOLIDAY_PRESIDENTS_DAY':
+      return 'Market is closed for Presidents Day holiday';
+    case 'HOLIDAY_MEMORIAL_DAY':
+      return 'Market is closed for Memorial Day holiday';
+    case 'HOLIDAY_JUNETEENTH':
+      return 'Market is closed for Juneteenth holiday';
+    case 'HOLIDAY_INDEPENDENCE_DAY':
+      return 'Market is closed for Independence Day holiday';
+    case 'HOLIDAY_LABOR_DAY':
+      return 'Market is closed for Labor Day holiday';
+    case 'HOLIDAY_THANKSGIVING':
+      return 'Market is closed for Thanksgiving holiday';
+    case 'HOLIDAY_CHRISTMAS':
+      return 'Market is closed for Christmas holiday';
+    default:
+      return 'Market is closed';
+  }
+}
+
+/**
+ * Check if stock data needs refresh based on:
+ * 1. Age of data (>15 minutes)
+ * 2. Whether market is currently open
+ * If market is closed, we can use older data since prices won't change
+ */
+export function isStockDataStale(updatedAt: Date | string): boolean {
+  // Convert to Date object if string is passed
+  const updatedAtDate = typeof updatedAt === 'string' ? new Date(updatedAt) : updatedAt;
+  
+  // Check if data is older than 15 minutes
+  const now = new Date();
+  const ageInMinutes = Math.floor((now.getTime() - updatedAtDate.getTime()) / (60 * 1000));
+  
+  // If data is fresh (less than 15 minutes old), it's not stale
+  if (ageInMinutes < 15) {
+    return false;
+  }
+  
+  // If data is older than 15 minutes, check if market is open
+  // Only consider data stale during market hours
+  return isMarketOpen();
+}
+
+/**
  * Get stored stock data for a ticker
  * Uses cached API with fallback to direct Supabase query
  * No longer checks for stale data as server background job handles updates
@@ -140,7 +305,18 @@ export async function getStockDataByTicker(ticker: string) {
                 const updatedAt = new Date(stockData.updated_at);
                 const ageInMinutes = Math.floor((now - updatedAt.getTime()) / (60 * 1000));
                 
-                logger.verbose(`Stock data for ${ticker} is ${ageInMinutes > 15 ? `${ageInMinutes} minutes old (server worker will refresh soon)` : 'fresh'}`);
+                // Check if data is stale considering market hours
+                const isStale = isStockDataStale(updatedAt);
+                
+                if (ageInMinutes > 15) {
+                    if (isStale) {
+                        logger.verbose(`Stock data for ${ticker} is ${ageInMinutes} minutes old (server worker will refresh soon)`);
+                    } else {
+                        logger.verbose(`Stock data for ${ticker} is ${ageInMinutes} minutes old but market is closed, no refresh needed`);
+                    }
+                } else {
+                    logger.verbose(`Stock data for ${ticker} is fresh (${ageInMinutes} minutes old)`);
+                }
                 
                 const formattedData = {
                     ticker: stockData.ticker,
