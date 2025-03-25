@@ -64,6 +64,8 @@ type PageProps = {
 }
 
 function PostPageContent({ id }: { id: string }) {
+  console.log(`[PostDetail] Rendering PostDetail for Post ID ${id}`);
+
   const router = useRouter()
   const { user, getAccessToken, getAuthTokens } = useAuth()
   const [post, setPost] = useState<PostData | null>(null)
@@ -88,6 +90,7 @@ function PostPageContent({ id }: { id: string }) {
   useEffect(() => {
     async function fetchPostData() {
       try {
+        console.log(`[PostDetail] Fetching post data for Post ID ${postId}`);
         // Get post data
         const { data: postData, error: postError } = await supabase
           .from('posts')
@@ -100,6 +103,10 @@ function PostPageContent({ id }: { id: string }) {
         }
 
         if (postData) {
+          console.log(`[PostDetail] Post data retrieved for Post ID ${postId}:`, {
+            likes_count: postData.likes_count,
+            comments_count: postData.comments_count
+          });
           setPost(postData)
           setLikesCount(postData.likes_count || 0)
           setCommentsCount(postData.comments_count || 0)
@@ -108,7 +115,7 @@ function PostPageContent({ id }: { id: string }) {
         // Get comments directly from Supabase
         await fetchComments()
       } catch (error) {
-        console.error('Error fetching post data:', error)
+        console.error(`[PostDetail] Error fetching post data for Post ID ${postId}:`, error)
         router.push('/')
       } finally {
         setIsLoading(false)
@@ -274,9 +281,13 @@ function PostPageContent({ id }: { id: string }) {
   // Check if user has liked the post
   useEffect(() => {
     async function checkIfLiked() {
-      if (!user || !postId) return
+      if (!user || !postId) {
+        console.log(`[PostDetail] Skipping like check for Post ID ${postId} - User:`, user ? 'logged in' : 'not logged in');
+        return;
+      }
 
       try {
+        console.log(`[PostDetail] Checking like status for Post ID ${postId}`);
         const { data, error } = await supabase
           .from('likes')
           .select('id')
@@ -288,9 +299,10 @@ function PostPageContent({ id }: { id: string }) {
           throw error
         }
 
+        console.log(`[PostDetail] Like status retrieved for Post ID ${postId} - Liked:`, !!data);
         setLiked(!!data)
       } catch (error) {
-        logger.error('Error checking like status:', error)
+        console.error(`[PostDetail] Error checking like status for Post ID ${postId}:`, error)
       }
     }
 
@@ -298,12 +310,19 @@ function PostPageContent({ id }: { id: string }) {
   }, [postId, user])
 
   const handleLike = async () => {
+    console.log(`[PostDetail] Post ID ${postId} - Current like status:`, liked);
+    console.log(`[PostDetail] Post ID ${postId} - Current likes count:`, likesCount);
+
     if (!user) {
+      console.log(`[PostDetail] Post ID ${postId} - No user logged in, redirecting to login`);
       router.push('/login')
       return
     }
 
-    if (isSubmittingLike) return
+    if (isSubmittingLike) {
+      console.log(`[PostDetail] Post ID ${postId} - Like action already in progress`);
+      return
+    }
 
     setIsSubmittingLike(true)
     
@@ -311,12 +330,16 @@ function PostPageContent({ id }: { id: string }) {
     const originalLiked = liked
     const originalLikesCount = likesCount
     
+    console.log(`[PostDetail] Post ID ${postId} - Optimistically updating UI - New like status:`, !liked);
+    console.log(`[PostDetail] Post ID ${postId} - Optimistically updating count from ${likesCount} to`, liked ? likesCount - 1 : likesCount + 1);
+    
     // Optimistically update UI
     setLiked(!liked)
     setLikesCount(prev => !liked ? prev + 1 : Math.max(0, prev - 1))
 
     try {
       if (originalLiked) {
+        console.log(`[PostDetail] Post ID ${postId} - Attempting to unlike post in Supabase`);
         // Unlike the post
         const { error } = await supabase
           .from('likes')
@@ -325,17 +348,21 @@ function PostPageContent({ id }: { id: string }) {
           .eq('user_id', user.id)
 
         if (error) {
+          console.error(`[PostDetail] Post ID ${postId} - Error unliking post:`, error);
           throw error
         }
         
+        console.log(`[PostDetail] Post ID ${postId} - Successfully unliked post in Supabase`);
         // Update the post object to keep it in sync
         if (post) {
+          console.log(`[PostDetail] Post ID ${postId} - Updating post object likes count from ${post.likes_count} to ${Math.max(0, post.likes_count - 1)}`);
           setPost({
             ...post,
             likes_count: Math.max(0, post.likes_count - 1)
           })
         }
       } else {
+        console.log(`[PostDetail] Post ID ${postId} - Attempting to like post in Supabase`);
         // Like the post
         const { error } = await supabase
           .from('likes')
@@ -345,11 +372,14 @@ function PostPageContent({ id }: { id: string }) {
           })
 
         if (error) {
+          console.error(`[PostDetail] Post ID ${postId} - Error liking post:`, error);
           throw error
         }
         
+        console.log(`[PostDetail] Post ID ${postId} - Successfully liked post in Supabase`);
         // Update the post object to keep it in sync
         if (post) {
+          console.log(`[PostDetail] Post ID ${postId} - Updating post object likes count from ${post.likes_count} to ${post.likes_count + 1}`);
           setPost({
             ...post,
             likes_count: post.likes_count + 1
@@ -357,12 +387,14 @@ function PostPageContent({ id }: { id: string }) {
         }
       }
     } catch (error) {
-      console.error('Error toggling like:', error)
+      console.error(`[PostDetail] Post ID ${postId} - Error toggling like:`, error);
+      console.log(`[PostDetail] Post ID ${postId} - Reverting UI to original state - Liked: ${originalLiked}, Count: ${originalLikesCount}`);
       // Revert UI on error
       setLiked(originalLiked)
       setLikesCount(originalLikesCount)
     } finally {
       setIsSubmittingLike(false)
+      console.log(`[PostDetail] Post ID ${postId} - Like action completed - Final state - Liked: ${!originalLiked}, Count: ${!originalLiked ? originalLikesCount + 1 : originalLikesCount - 1}`);
     }
   }
 

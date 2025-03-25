@@ -62,6 +62,9 @@ export default function PostCard({
   stats,
   liked: initialLiked,
 }: PostCardProps) {
+  console.log(`[PostCard] Rendering PostCard for Post ID ${id}`);
+  console.log(`[PostCard] Initial stats for Post ID ${id}:`, { likes: stats.likes, comments: stats.comments, reposts: stats.reposts });
+
   const router = useRouter()
   const { user: currentUser } = useAuth()
   const [liked, setLiked] = useState(initialLiked || false)
@@ -73,9 +76,10 @@ export default function PostCard({
 
   // This effect ensures the like count stays in sync with prop updates
   useEffect(() => {
+    console.log(`[PostCard] Updating like state for Post ID ${id} - Liked: ${initialLiked}, Likes Count: ${stats.likes}`);
     setLiked(initialLiked || false)
     setLikesCount(stats.likes)
-  }, [initialLiked, stats.likes])
+  }, [initialLiked, stats.likes, id])
 
   // Fetch stock data for this post
   useEffect(() => {
@@ -115,9 +119,13 @@ export default function PostCard({
   // Check if the current user has liked this post - only run if initialLiked is not provided
   useEffect(() => {
     async function checkIfLiked() {
-      if (!currentUser || initialLiked !== undefined) return // Skip if initialLiked is provided
+      if (!currentUser || initialLiked !== undefined) {
+        console.log(`[PostCard] Skipping like check for Post ID ${id} - User:`, currentUser ? 'logged in' : 'not logged in', 'Initial liked:', initialLiked);
+        return;
+      }
 
       try {
+        console.log(`[PostCard] Checking like status for Post ID ${id}`);
         const { data, error } = await supabase
           .from('likes')
           .select('id')
@@ -129,24 +137,32 @@ export default function PostCard({
           throw error
         }
 
+        console.log(`[PostCard] Like status retrieved for Post ID ${id} - Liked:`, !!data);
         setLiked(!!data)
       } catch (error) {
-        logger.error('Error checking like status:', error)
+        console.error(`[PostCard] Error checking like status for Post ID ${id}:`, error)
       }
     }
 
     checkIfLiked()
-  }, [id, currentUser, initialLiked]) // Add initialLiked to dependencies
+  }, [id, currentUser, initialLiked])
 
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation() // Prevent the card click from firing
 
+    console.log(`[PostCard] Post ID ${id} - Current like status:`, liked);
+    console.log(`[PostCard] Post ID ${id} - Current likes count:`, likesCount);
+
     if (!currentUser) {
+      console.log(`[PostCard] Post ID ${id} - No user logged in, redirecting to login`);
       router.push('/login')
       return
     }
 
-    if (isSubmitting) return
+    if (isSubmitting) {
+      console.log(`[PostCard] Post ID ${id} - Like action already in progress`);
+      return
+    }
 
     setIsSubmitting(true)
     
@@ -154,42 +170,79 @@ export default function PostCard({
     const originalLiked = liked
     const originalLikesCount = likesCount
     
+    console.log(`[PostCard] Post ID ${id} - Optimistically updating UI - New like status:`, !liked);
+    console.log(`[PostCard] Post ID ${id} - Optimistically updating count from ${likesCount} to`, liked ? likesCount - 1 : likesCount + 1);
+    
     // Optimistically update UI
     setLiked(!liked)
     setLikesCount(prev => !liked ? prev + 1 : Math.max(0, prev - 1))
 
     try {
       if (originalLiked) {
+        console.log(`[PostCard] Post ID ${id} - Attempting to unlike post in Supabase`);
         // Unlike the post
-        const { error } = await supabase
+        const { error: unlikeError } = await supabase
           .from('likes')
           .delete()
           .eq('post_id', id)
           .eq('user_id', currentUser.id)
 
-        if (error) {
-          throw error
+        if (unlikeError) {
+          console.error(`[PostCard] Post ID ${id} - Error unliking post:`, unlikeError);
+          throw unlikeError
         }
+        
+        // Update the post's likes count
+        console.log(`[PostCard] Post ID ${id} - Updating post likes_count in posts table after unlike`);
+        const { error: updateError } = await supabase
+          .from('posts')
+          .update({ likes_count: originalLikesCount - 1 })
+          .eq('id', id)
+
+        if (updateError) {
+          console.error(`[PostCard] Post ID ${id} - Error updating post likes count:`, updateError);
+          throw updateError
+        }
+
+        console.log(`[PostCard] Post ID ${id} - Successfully unliked post and updated count in Supabase`);
       } else {
+        console.log(`[PostCard] Post ID ${id} - Attempting to like post in Supabase`);
         // Like the post
-        const { error } = await supabase
+        const { error: likeError } = await supabase
           .from('likes')
           .insert({
             post_id: id,
             user_id: currentUser.id
           })
 
-        if (error) {
-          throw error
+        if (likeError) {
+          console.error(`[PostCard] Post ID ${id} - Error liking post:`, likeError);
+          throw likeError
         }
+
+        // Update the post's likes count
+        console.log(`[PostCard] Post ID ${id} - Updating post likes_count in posts table after like`);
+        const { error: updateError } = await supabase
+          .from('posts')
+          .update({ likes_count: originalLikesCount + 1 })
+          .eq('id', id)
+
+        if (updateError) {
+          console.error(`[PostCard] Post ID ${id} - Error updating post likes count:`, updateError);
+          throw updateError
+        }
+
+        console.log(`[PostCard] Post ID ${id} - Successfully liked post and updated count in Supabase`);
       }
     } catch (error) {
-      logger.error('Error toggling like:', error)
+      console.error(`[PostCard] Post ID ${id} - Error toggling like:`, error);
+      console.log(`[PostCard] Post ID ${id} - Reverting UI to original state - Liked: ${originalLiked}, Count: ${originalLikesCount}`);
       // Revert UI on error
       setLiked(originalLiked)
       setLikesCount(originalLikesCount)
     } finally {
       setIsSubmitting(false)
+      console.log(`[PostCard] Post ID ${id} - Like action completed - Final state - Liked: ${!originalLiked}, Count: ${!originalLiked ? originalLikesCount + 1 : originalLikesCount - 1}`);
     }
   }
 
