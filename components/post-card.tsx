@@ -257,7 +257,15 @@ export default function PostCard({
     >
       <CardHeader className="flex flex-row items-center gap-4 p-4">
         <Avatar>
-          <AvatarImage src={user.avatar} alt={`@${user.username}`} />
+          <AvatarImage 
+            src={user.avatar.startsWith('/') ? user.avatar : `/avatars/${user.avatar}`} 
+            alt={`@${user.username}`} 
+            onError={(e) => {
+              // If the image fails to load, set the source to our placeholder
+              console.log(`[PostCard] Avatar image error for ${user.username}, using fallback`);
+              e.currentTarget.src = '/placeholder.svg';
+            }}
+          />
           <AvatarFallback className="bg-gray-700">{user.name.charAt(0)}</AvatarFallback>
         </Avatar>
         <div className="flex-1">

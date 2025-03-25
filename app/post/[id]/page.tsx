@@ -413,13 +413,13 @@ function PostPageContent({ id }: { id: string }) {
 
     try {
       const commentData = {
-        post_id: postId,
-        user_id: user.id,
         content: newComment.trim(),
-        username: user.user_metadata?.username || "Anonymous",
-        avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg?height=40&width=40",
+        user_id: user.id,
+        post_id: postId,
+        username: user.user_metadata?.username || "Anonymous User",
+        avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg",
         created_at: new Date().toISOString(),
-        parent_comment_id: null, // This is a top-level comment
+        parent_comment_id: null,
         level: 0
       };
 
@@ -474,14 +474,14 @@ function PostPageContent({ id }: { id: string }) {
 
     try {
       const commentData = {
-        post_id: postId,
-        user_id: user.id,
         content: replyContent.trim(),
-        username: user.user_metadata?.username || "Anonymous",
-        avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg?height=40&width=40",
+        user_id: user.id,
+        post_id: postId,
+        username: user.user_metadata?.username || "Anonymous User",
+        avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg",
         created_at: new Date().toISOString(),
         parent_comment_id: parentCommentId,
-        level: parentLevel + 1 // Increment level for replies
+        level: parentLevel + 1
       };
 
       // Direct Supabase insertion
@@ -625,10 +625,19 @@ function PostPageContent({ id }: { id: string }) {
       <div className="comment-thread">
         <Card key={comment.id} className="border-gray-700 bg-gray-800">
           <CardHeader className="flex flex-row items-center gap-3 p-4">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={comment.avatar_url || "/placeholder.svg?height=32&width=32"} alt={`@${comment.username}`} />
-              <AvatarFallback className="bg-gray-700">{comment.username.charAt(0)}</AvatarFallback>
-            </Avatar>
+            <div className="mr-4">
+              <Avatar>
+                <AvatarImage 
+                  src={comment.avatar_url || "/placeholder.svg"} 
+                  alt={`@${comment.username}`} 
+                  onError={(e) => {
+                    console.log(`[PostDetail] Avatar image error for comment author ${comment.username}, using fallback`);
+                    e.currentTarget.src = '/placeholder.svg';
+                  }}
+                />
+                <AvatarFallback>{comment.username.charAt(0).toUpperCase()}</AvatarFallback>
+              </Avatar>
+            </div>
             <div className="flex-1">
               <p className="font-medium">{comment.username}</p>
               <p className="text-xs text-gray-400">
@@ -674,38 +683,42 @@ function PostPageContent({ id }: { id: string }) {
             <div className="px-4 pb-4">
               <div className="pl-6 border-l-2 border-gray-700">
                 <div className="flex items-center gap-3 mb-2">
-                  <Avatar className="h-6 w-6">
-                    <AvatarImage 
-                      src={user.user_metadata?.avatar_url || "/placeholder.svg?height=24&width=24"} 
-                      alt={user.user_metadata?.username || "User"} 
-                    />
-                    <AvatarFallback className="bg-gray-700 text-xs">
-                      {user.user_metadata?.username ? user.user_metadata.username.substring(0, 1).toUpperCase() : "U"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <Textarea
-                    placeholder={`Reply to ${comment.username}...`}
-                    className="flex-1 min-h-16 bg-gray-700/30 border-gray-600 text-sm"
-                    value={replyContent}
-                    onChange={(e) => setReplyContent(e.target.value)}
-                  />
+                  <div className="mr-2 flex items-start pt-1.5">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage 
+                        src={user.user_metadata?.avatar_url || "/placeholder.svg"} 
+                        alt="Your avatar" 
+                        onError={(e) => {
+                          console.log(`[PostDetail] Avatar image error for current user, using fallback`);
+                          e.currentTarget.src = '/placeholder.svg';
+                        }}
+                      />
+                    </Avatar>
+                  </div>
+                  <span className="text-gray-400 text-sm">You</span>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    onClick={() => setActiveReplyTo(null)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    disabled={isSubmittingComment || !replyContent.trim()}
-                    onClick={() => handleSubmitReply(comment.id, comment.level || 0)}
-                  >
-                    {isSubmittingComment ? "Replying..." : "Reply"}
-                  </Button>
-                </div>
+                <Textarea
+                  placeholder={`Reply to ${comment.username}...`}
+                  className="flex-1 min-h-16 bg-gray-700/30 border-gray-600 text-sm"
+                  value={replyContent}
+                  onChange={(e) => setReplyContent(e.target.value)}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={() => setActiveReplyTo(null)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  size="sm" 
+                  disabled={isSubmittingComment || !replyContent.trim()}
+                  onClick={() => handleSubmitReply(comment.id, comment.level || 0)}
+                >
+                  {isSubmittingComment ? "Replying..." : "Reply"}
+                </Button>
               </div>
             </div>
           )}
@@ -757,8 +770,15 @@ function PostPageContent({ id }: { id: string }) {
         <Card className="border-gray-700 bg-gray-800 mb-6">
           <CardHeader className="flex flex-row items-center gap-4 p-4">
             <Avatar>
-              <AvatarImage src={post.avatar_url || "/placeholder.svg?height=40&width=40"} alt={`@${post.username}`} />
-              <AvatarFallback className="bg-gray-700">{post.username.charAt(0)}</AvatarFallback>
+              <AvatarImage 
+                src={post.avatar_url || "/placeholder.svg"} 
+                alt={`@${post.username}`} 
+                onError={(e) => {
+                  console.log(`[PostDetail] Avatar image error for post author ${post.username}, using fallback`);
+                  e.currentTarget.src = '/placeholder.svg';
+                }}
+              />
+              <AvatarFallback>{post.username.charAt(0).toUpperCase()}</AvatarFallback>
             </Avatar>
             <div className="flex-1">
               <p className="font-medium">{post.username}</p>
@@ -766,12 +786,11 @@ function PostPageContent({ id }: { id: string }) {
                 @{post.username.toLowerCase().replace(/\s+/g, '')} • {formatDate(post.created_at)}
               </p>
             </div>
-            
-            {/* Add Delete Post Button */}
             <DeletePostButton
               postId={postId}
               userId={post.user_id}
               currentUserId={user?.id}
+              onSuccess={() => router.push('/')}
             />
           </CardHeader>
           <CardContent className="p-4 pt-0">
@@ -830,15 +849,19 @@ function PostPageContent({ id }: { id: string }) {
             <form onSubmit={handleSubmitComment}>
               <CardContent className="p-4 space-y-4">
                 <div className="flex items-center gap-3">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage
-                      src={user.user_metadata?.avatar_url || "/placeholder.svg?height=32&width=32"}
-                      alt={user.user_metadata?.username || "User"}
-                    />
-                    <AvatarFallback className="bg-gray-700">
-                      {user.user_metadata?.username ? user.user_metadata.username.substring(0, 1).toUpperCase() : "U"}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="mr-2 flex items-start pt-1.5">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage 
+                        src={user.user_metadata?.avatar_url || "/placeholder.svg"} 
+                        alt="Your avatar" 
+                        onError={(e) => {
+                          console.log(`[PostDetail] Avatar image error for comment form, using fallback`);
+                          e.currentTarget.src = '/placeholder.svg';
+                        }}
+                      />
+                      <AvatarFallback>{user.email?.charAt(0).toUpperCase() || '?'}</AvatarFallback>
+                    </Avatar>
+                  </div>
                   <Textarea
                     placeholder="Add a comment..."
                     className="flex-1 min-h-16 bg-gray-700/30 border-gray-600"

@@ -71,7 +71,7 @@ export default function CreatePostPage() {
         content: content.trim(),
         user_id: user.id,
         username: user.user_metadata?.username || "Anonymous",
-        avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg?height=40&width=40",
+        avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg",
         tickers: tickers // Set tickers array directly during post creation
       };
 
@@ -247,13 +247,24 @@ export default function CreatePostPage() {
         <h1 className="mb-6 text-2xl font-bold">Create Post</h1>
         <Card className="border-gray-700 bg-gray-800">
           <form onSubmit={handleSubmit}>
-            <CardHeader className="flex flex-row items-center gap-4 p-4">
-              <Avatar>
-                <AvatarImage src={user?.user_metadata?.avatar_url || "/placeholder.svg?height=40&width=40"} alt="@user" />
-                <AvatarFallback>{user?.user_metadata?.username?.substring(0, 2).toUpperCase() || "U"}</AvatarFallback>
-              </Avatar>
-              <CardTitle className="text-base">Share your insights</CardTitle>
-            </CardHeader>
+            <div className="p-4">
+              <div className="flex items-center gap-3 mb-4">
+                <Avatar>
+                  <AvatarImage 
+                    src={user?.user_metadata?.avatar_url || "/placeholder.svg"} 
+                    alt="@user" 
+                    onError={(e) => {
+                      console.log(`[CreatePost] Avatar image error for user, using fallback`);
+                      e.currentTarget.src = '/placeholder.svg';
+                    }}
+                  />
+                  <AvatarFallback>
+                    {user?.user_metadata?.username ? user.user_metadata.username.substring(0, 1).toUpperCase() : "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="text-base font-semibold">Share your insights</div>
+              </div>
+            </div>
             <CardContent className="p-4 pt-0 space-y-4">
               <div className="space-y-2">
                 <Textarea

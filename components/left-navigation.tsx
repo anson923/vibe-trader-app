@@ -59,9 +59,16 @@ export default function LeftNavigation() {
                   className="flex items-center gap-2 rounded-md py-2 px-3 hover:bg-gray-700 transition-colors"
                 >
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src="/placeholder.svg?height=32&width=32" alt={user.user_metadata?.username || "@user"} />
-                    <AvatarFallback className="bg-gray-600">
-                      {user.user_metadata?.username ? user.user_metadata.username.substring(0, 2).toUpperCase() : "U"}
+                    <AvatarImage 
+                      src={user.user_metadata?.avatar_url || "/placeholder.svg"} 
+                      alt={user.user_metadata?.username || "@user"} 
+                      onError={(e) => {
+                        console.log(`[LeftNav] Avatar image error, using fallback`);
+                        e.currentTarget.src = '/placeholder.svg';
+                      }}
+                    />
+                    <AvatarFallback className="bg-gray-700">
+                      {user.user_metadata?.username ? user.user_metadata.username.substring(0, 1).toUpperCase() : "U"}
                     </AvatarFallback>
                   </Avatar>
                   <span className="text-sm font-medium">{user.user_metadata?.username || "User"}</span>

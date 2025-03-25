@@ -8,6 +8,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useAuth } from "@/lib/context/auth-context"
+import { ChevronDown } from "lucide-react"
+import { DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 export default function MobileNavigation() {
   const pathname = usePathname()
@@ -47,9 +49,16 @@ export default function MobileNavigation() {
               <SheetTrigger asChild>
                 <button className="flex flex-col items-center justify-center rounded-md px-3 py-1 text-muted-foreground hover:text-foreground">
                   <Avatar className="h-6 w-6">
-                    <AvatarImage src="/placeholder.svg?height=24&width=24" alt={user.user_metadata?.username || "@user"} />
-                    <AvatarFallback className="bg-gray-600">
-                      {user.user_metadata?.username ? user.user_metadata.username.substring(0, 2).toUpperCase() : "U"}
+                    <AvatarImage 
+                      src={user.user_metadata?.avatar_url || "/placeholder.svg"} 
+                      alt={user.user_metadata?.username || "@user"} 
+                      onError={(e) => {
+                        console.log(`[MobileNav] Avatar image error, using fallback`);
+                        e.currentTarget.src = '/placeholder.svg';
+                      }}
+                    />
+                    <AvatarFallback className="bg-gray-700 text-xs">
+                      {user.user_metadata?.username ? user.user_metadata.username.substring(0, 1).toUpperCase() : "U"}
                     </AvatarFallback>
                   </Avatar>
                   <span className="mt-1 text-xs">Profile</span>
@@ -63,9 +72,16 @@ export default function MobileNavigation() {
                       className="flex items-center gap-2 rounded-md py-2 px-3 hover:bg-gray-700 transition-colors"
                     >
                       <Avatar className="h-10 w-10">
-                        <AvatarImage src="/placeholder.svg?height=40&width=40" alt={user.user_metadata?.username || "@user"} />
-                        <AvatarFallback className="bg-gray-600">
-                          {user.user_metadata?.username ? user.user_metadata.username.substring(0, 2).toUpperCase() : "U"}
+                        <AvatarImage 
+                          src={user.user_metadata?.avatar_url || "/placeholder.svg"} 
+                          alt={user.user_metadata?.username || "@user"} 
+                          onError={(e) => {
+                            console.log(`[MobileNav] Profile avatar image error, using fallback`);
+                            e.currentTarget.src = '/placeholder.svg';
+                          }}
+                        />
+                        <AvatarFallback className="bg-gray-700">
+                          {user.user_metadata?.username ? user.user_metadata.username.substring(0, 1).toUpperCase() : "U"}
                         </AvatarFallback>
                       </Avatar>
                       <div>
