@@ -25,10 +25,34 @@ export async function GET(request: NextRequest) {
       filteredPosts = posts.filter(post => post.user_id === userId);
     }
 
+    // Check for user likes if userId is provided
+    let likedPostIds = new Set<number>();
+    if (userId) {
+      try {
+        const { data: userLikes, error: likesError } = await supabaseAdmin
+          .from('likes')
+          .select('post_id')
+          .eq('user_id', userId);
+
+        if (!likesError && userLikes && userLikes.length > 0) {
+          likedPostIds = new Set(userLikes.map(like => like.post_id));
+        }
+      } catch (likesError) {
+        console.error('Error fetching user likes:', likesError);
+        // Continue without likes data if there's an error
+      }
+    }
+
+    // Add liked status to each post if userId is provided
+    const postsWithLikes = filteredPosts.map(post => ({
+      ...post,
+      liked: userId ? likedPostIds.has(post.id) : undefined
+    }));
+
     // Calculate pagination
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
-    const paginatedPosts = filteredPosts.slice(startIndex, endIndex);
+    const paginatedPosts = postsWithLikes.slice(startIndex, endIndex);
 
     // Return response
     return NextResponse.json({

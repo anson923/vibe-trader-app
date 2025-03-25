@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { TrendingUp } from "lucide-react"
 import PostCard from "@/components/post-card"
 import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/lib/context/auth-context"
 
 // Post type definition
 interface Post {
@@ -38,6 +39,7 @@ interface FormattedPost {
     comments: number
     reposts: number
   }
+  liked?: boolean
 }
 
 export default function FeedPage() {
@@ -45,13 +47,19 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(true)
   const [stocks, setStocks] = useState<any[]>([])
   const [loadingStocks, setLoadingStocks] = useState(true)
+  const { user } = useAuth()
 
   useEffect(() => {
     async function fetchPosts() {
       try {
         // First try to get posts from the cached API
         try {
-          const response = await fetch('/api/cached-posts');
+          // Add user ID to the request if available
+          const url = user 
+            ? `/api/cached-posts?userId=${user.id}` 
+            : '/api/cached-posts';
+            
+          const response = await fetch(url);
           
           if (!response.ok) {
             throw new Error('Failed to fetch from cached API');
@@ -61,7 +69,7 @@ export default function FeedPage() {
           
           if (result.data && Array.isArray(result.data)) {
             // Format posts for the PostCard component
-            const formattedPosts = result.data.map((post: Post): FormattedPost => ({
+            const formattedPosts = result.data.map((post: Post & { liked?: boolean }): FormattedPost => ({
               id: post.id,
               user: {
                 name: post.username,
@@ -77,6 +85,7 @@ export default function FeedPage() {
                 comments: post.comments_count || 0,
                 reposts: 0,
               },
+              liked: post.liked || false, // Add this to pass the liked state from API
             }));
 
             setPosts(formattedPosts);
@@ -88,16 +97,33 @@ export default function FeedPage() {
         }
 
         // Fallback to direct Supabase if cached API fails
-        const { data, error } = await supabase
+        let query = supabase
           .from('posts')
           .select('*')
           .order('created_at', { ascending: false });
+
+        const { data, error } = await query;
 
         if (error) {
           throw error;
         }
 
         if (data) {
+          // Check which posts are liked by the current user
+          let likedPostIds = new Set<number>();
+          
+          if (user) {
+            // Query the likes table to get posts liked by the current user
+            const { data: likedPosts, error: likesError } = await supabase
+              .from('likes')
+              .select('post_id')
+              .eq('user_id', user.id);
+              
+            if (!likesError && likedPosts) {
+              likedPostIds = new Set(likedPosts.map(like => like.post_id));
+            }
+          }
+
           // Format posts for the PostCard component
           const formattedPosts = data.map((post: Post): FormattedPost => ({
             id: post.id,
@@ -115,6 +141,7 @@ export default function FeedPage() {
               comments: post.comments_count || 0,
               reposts: 0,
             },
+            liked: likedPostIds.has(post.id), // Check if this post is liked by the user
           }));
 
           setPosts(formattedPosts);
@@ -128,7 +155,7 @@ export default function FeedPage() {
     }
 
     fetchPosts();
-  }, []);
+  }, [user]); // Add user as a dependency so the effect runs when user changes
 
   // Fetch stocks from cache
   useEffect(() => {

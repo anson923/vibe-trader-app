@@ -146,7 +146,7 @@ function PostPageContent({ id }: { id: string }) {
       }
       
       // Fallback to direct query
-      const { data, error } = await supabase
+      const { data: commentsData, error: commentsError } = await supabase
         .from('comments')
         .select(`
           id,
@@ -163,13 +163,11 @@ function PostPageContent({ id }: { id: string }) {
         .eq('post_id', postId)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        throw error;
+      if (commentsError) {
+        throw commentsError;
       }
 
-      if (data) {
-        logger.info('Comment data structure:', data[0]); // Log first comment for structure
-        
+      if (commentsData) {
         // Map to track liked comments if user is authenticated
         let likedCommentIds = new Set<number>();
         
@@ -186,7 +184,7 @@ function PostPageContent({ id }: { id: string }) {
         }
         
         // Map comments directly without nested profiles handling
-        const commentsData = data.map(comment => ({
+        const processedComments = commentsData.map(comment => ({
           id: comment.id,
           content: comment.content,
           created_at: comment.created_at,
@@ -206,12 +204,12 @@ function PostPageContent({ id }: { id: string }) {
         const commentMap = new Map<number, CommentData>();
         
         // First, create a map of all comments
-        commentsData.forEach(comment => {
+        processedComments.forEach(comment => {
           commentMap.set(comment.id, comment);
         });
         
         // Then, build the tree structure
-        commentsData.forEach(comment => {
+        processedComments.forEach(comment => {
           if (comment.parent_comment_id) {
             // This is a reply, add it to parent's replies array
             const parentComment = commentMap.get(comment.parent_comment_id);
@@ -247,11 +245,12 @@ function PostPageContent({ id }: { id: string }) {
         
         sortReplies(rootComments);
         
-        setIsLoadingComments(false);
         setComments(rootComments);
       }
     } catch (error) {
-      logger.error('Error fetching comments fallback:', error);
+      logger.error('Error fetching comments:', error);
+    } finally {
+      setIsLoadingComments(false);
     }
   };
 
@@ -635,11 +634,8 @@ function PostPageContent({ id }: { id: string }) {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          // Add authorization header with both tokens if available
-          ...(accessToken && { 
-            'Authorization': `Bearer ${accessToken}`,
-            'X-Refresh-Token': refreshToken || ''
-          }),
+          'Authorization': `Bearer ${accessToken}`,
+          ...(refreshToken && { 'X-Refresh-Token': refreshToken }),
         },
         body: JSON.stringify({
           commentId,
@@ -649,7 +645,7 @@ function PostPageContent({ id }: { id: string }) {
       });
 
       if (!response.ok) {
-        // If already liked (409 conflict) just ignore
+        // If already liked (409 conflict) just ignore and keep optimistic update
         if (response.status === 409) {
           setIsSubmittingCommentLike(false);
           return;
@@ -659,20 +655,18 @@ function PostPageContent({ id }: { id: string }) {
 
       const result = await response.json();
       
-      // Fine-tune the UI with actual data from server if needed
+      // Update UI with actual data from server
       if (result.likes_count !== undefined) {
         setComments(prevComments => {
-          // Helper function to update comment in a nested structure
           const updateCommentInTree = (comments: CommentData[]): CommentData[] => {
             return comments.map(comment => {
               if (comment.id === commentId) {
-                // Update this comment with exact count from server
                 return {
                   ...comment,
-                  likes_count: result.likes_count
+                  likes_count: result.likes_count,
+                  liked: likeAction === 'like' // Ensure liked status matches server action
                 };
               } else if (comment.replies && comment.replies.length > 0) {
-                // Check in replies
                 return {
                   ...comment,
                   replies: updateCommentInTree(comment.replies)
@@ -685,6 +679,9 @@ function PostPageContent({ id }: { id: string }) {
           return updateCommentInTree(prevComments);
         });
       }
+
+      // Refresh comments to ensure consistency with server state
+      await fetchComments();
     } catch (error) {
       console.error(`Error ${isLiked ? 'unliking' : 'liking'} comment:`, error);
       // Revert UI to original state on error
@@ -692,7 +689,7 @@ function PostPageContent({ id }: { id: string }) {
     } finally {
       setIsSubmittingCommentLike(false);
     }
-  }
+  };
 
   // Format date and time
   const formatDate = (dateString: string) => {

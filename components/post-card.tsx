@@ -31,6 +31,7 @@ interface PostCardProps {
     comments: number
     reposts: number
   }
+  liked?: boolean
 }
 
 // Define type for the stock data returned from getStockDataForPost
@@ -59,10 +60,11 @@ export default function PostCard({
   content,
   time,
   stats,
+  liked: initialLiked,
 }: PostCardProps) {
   const router = useRouter()
   const { user: currentUser } = useAuth()
-  const [liked, setLiked] = useState(false)
+  const [liked, setLiked] = useState(initialLiked || false)
   const [likesCount, setLikesCount] = useState(stats.likes)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [stockData, setStockData] = useState<StockData[]>([])
@@ -104,10 +106,10 @@ export default function PostCard({
     fetchStockData();
   }, [id]);
 
-  // Check if the current user has liked this post
+  // Check if the current user has liked this post - only run if initialLiked is not provided
   useEffect(() => {
     async function checkIfLiked() {
-      if (!currentUser) return
+      if (!currentUser || initialLiked !== undefined) return // Skip if initialLiked is provided
 
       try {
         const { data, error } = await supabase
@@ -128,7 +130,7 @@ export default function PostCard({
     }
 
     checkIfLiked()
-  }, [id, currentUser])
+  }, [id, currentUser, initialLiked]) // Add initialLiked to dependencies
 
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation() // Prevent the card click from firing
