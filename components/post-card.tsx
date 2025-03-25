@@ -71,6 +71,12 @@ export default function PostCard({
   const profitColor = user.profit >= 0 ? "text-green-500" : "text-red-500"
   const profitSign = user.profit >= 0 ? "+" : ""
 
+  // This effect ensures the like count stays in sync with prop updates
+  useEffect(() => {
+    setLiked(initialLiked || false)
+    setLikesCount(stats.likes)
+  }, [initialLiked, stats.likes])
+
   // Fetch stock data for this post
   useEffect(() => {
     async function fetchStockData() {

@@ -52,57 +52,11 @@ export default function FeedPage() {
   useEffect(() => {
     async function fetchPosts() {
       try {
-        // First try to get posts from the cached API
-        try {
-          // Add user ID to the request if available
-          const url = user 
-            ? `/api/cached-posts?userId=${user.id}` 
-            : '/api/cached-posts';
-            
-          const response = await fetch(url);
-          
-          if (!response.ok) {
-            throw new Error('Failed to fetch from cached API');
-          }
-          
-          const result = await response.json();
-          
-          if (result.data && Array.isArray(result.data)) {
-            // Format posts for the PostCard component
-            const formattedPosts = result.data.map((post: Post & { liked?: boolean }): FormattedPost => ({
-              id: post.id,
-              user: {
-                name: post.username,
-                username: post.username.toLowerCase().replace(/\s+/g, ''),
-                avatar: post.avatar_url || "/placeholder.svg?height=40&width=40",
-                profit: 0, // Default value since profit isn't in our posts table
-              },
-              userId: post.user_id,
-              content: post.content,
-              time: formatTimeAgo(new Date(post.created_at)),
-              stats: {
-                likes: post.likes_count || 0,
-                comments: post.comments_count || 0,
-                reposts: 0,
-              },
-              liked: post.liked || false, // Add this to pass the liked state from API
-            }));
-
-            setPosts(formattedPosts);
-            console.log('Successfully fetched posts from cached API');
-            return; // Exit if cached fetch was successful
-          }
-        } catch (cacheError) {
-          console.warn('Failed to fetch posts from cached API, falling back to direct Supabase:', cacheError);
-        }
-
-        // Fallback to direct Supabase if cached API fails
-        let query = supabase
+        // Direct Supabase query for posts
+        const { data, error } = await supabase
           .from('posts')
           .select('*')
           .order('created_at', { ascending: false });
-
-        const { data, error } = await query;
 
         if (error) {
           throw error;
@@ -145,7 +99,7 @@ export default function FeedPage() {
           }));
 
           setPosts(formattedPosts);
-          console.log('Successfully fetched posts from Supabase (fallback)');
+          console.log('Successfully fetched posts from Supabase');
         }
       } catch (error) {
         console.error("Error fetching posts:", error);

@@ -105,7 +105,7 @@ function PostPageContent({ id }: { id: string }) {
           setCommentsCount(postData.comments_count || 0)
         }
 
-        // Get comments from cached API instead of direct Supabase query
+        // Get comments directly from Supabase
         await fetchComments()
       } catch (error) {
         console.error('Error fetching post data:', error)
@@ -118,34 +118,14 @@ function PostPageContent({ id }: { id: string }) {
     fetchPostData()
   }, [postId, router])
 
-  // Separate function to fetch comments from cached API
+  // Separate function to fetch comments directly from Supabase
   const fetchComments = async () => {
     if (!postId) return;
 
     setIsLoadingComments(true);
     
     try {
-      // First try to get from cached API
-      try {
-        const response = await fetch(`/api/cached-comments?postId=${postId}${user ? `&userId=${user.id}` : ''}`);
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch comments from cached API: ${response.statusText}`);
-        }
-        
-        const result = await response.json();
-        
-        if (result.data && Array.isArray(result.data)) {
-          setComments(result.data);
-          setIsLoadingComments(false);
-          return; // Success, no need for fallback
-        }
-      } catch (cacheError) {
-        logger.warn(`Failed to fetch comments from cached API, falling back to direct query:`, cacheError);
-        // Continue to fallback
-      }
-      
-      // Fallback to direct query
+      // Direct query to Supabase
       const { data: commentsData, error: commentsError } = await supabase
         .from('comments')
         .select(`
@@ -347,6 +327,14 @@ function PostPageContent({ id }: { id: string }) {
         if (error) {
           throw error
         }
+        
+        // Update the post object to keep it in sync
+        if (post) {
+          setPost({
+            ...post,
+            likes_count: Math.max(0, post.likes_count - 1)
+          })
+        }
       } else {
         // Like the post
         const { error } = await supabase
@@ -359,6 +347,14 @@ function PostPageContent({ id }: { id: string }) {
         if (error) {
           throw error
         }
+        
+        // Update the post object to keep it in sync
+        if (post) {
+          setPost({
+            ...post,
+            likes_count: post.likes_count + 1
+          })
+        }
       }
     } catch (error) {
       console.error('Error toggling like:', error)
@@ -370,7 +366,7 @@ function PostPageContent({ id }: { id: string }) {
     }
   }
 
-  // Handle submit comment using cached API
+  // Handle submit comment using direct Supabase
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -395,79 +391,35 @@ function PostPageContent({ id }: { id: string }) {
         level: 0
       };
 
-      // First try to use the cached API endpoint
-      try {
-        const response = await fetch('/api/cached-comments', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(commentData),
-        });
+      // Direct Supabase insertion
+      const { data, error } = await supabase
+        .from('comments')
+        .insert([commentData])
+        .select();
 
-        if (!response.ok) {
-          throw new Error(`Failed to add comment using cached API: ${response.status}`);
-        }
+      if (error) {
+        throw error;
+      }
 
-        const result = await response.json();
+      if (data && data[0]) {
+        // Clear comment input
+        setNewComment("");
         
-        if (result.data) {
-          // Clear comment input first
-          setNewComment("");
-          
-          // Refresh all comments to ensure consistency
-          await fetchComments();
-          
-          // Update the comment count
-          setCommentsCount(prev => prev + 1);
-          
-          // Also update the likes count in the post
-          try {
-            await supabase
-              .from('posts')
-              .update({ comments_count: commentsCount + 1 })
-              .eq('id', postId);
-          } catch (error) {
-            console.error('Error updating post comments count:', error);
-            // Continue anyway since the comment was added successfully
-          }
-          return;
-        }
+        // Refresh all comments
+        await fetchComments();
         
-        throw new Error('No data returned from cached comments API');
-      } catch (cacheError) {
-        console.warn("Couldn't use cached API, falling back to direct Supabase:", cacheError);
+        // Update counts
+        setCommentsCount(prev => prev + 1);
         
-        // Fallback to direct Supabase insertion
-        const { data, error } = await supabase
-          .from('comments')
-          .insert([commentData])
-          .select();
-
-        if (error) {
-          throw error;
-        }
-
-        if (data && data[0]) {
-          // Clear comment input
-          setNewComment("");
-          
-          // Refresh all comments
-          await fetchComments();
-          
-          // Update counts
-          setCommentsCount(prev => prev + 1);
-          
-          // Also update the likes count in the post
-          try {
-            await supabase
-              .from('posts')
-              .update({ comments_count: commentsCount + 1 })
-              .eq('id', postId);
-          } catch (error) {
-            console.error('Error updating post comments count:', error);
-            // Continue anyway since the comment was added successfully
-          }
+        // Also update the likes count in the post
+        try {
+          await supabase
+            .from('posts')
+            .update({ comments_count: commentsCount + 1 })
+            .eq('id', postId);
+        } catch (error) {
+          console.error('Error updating post comments count:', error);
+          // Continue anyway since the comment was added successfully
         }
       }
     } catch (error) {
@@ -500,77 +452,34 @@ function PostPageContent({ id }: { id: string }) {
         level: parentLevel + 1 // Increment level for replies
       };
 
-      try {
-        const response = await fetch('/api/cached-comments', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(commentData),
-        });
+      // Direct Supabase insertion
+      const { data, error: supabaseError } = await supabase
+        .from('comments')
+        .insert([commentData])
+        .select();
 
-        if (!response.ok) {
-          throw new Error(`Failed to add reply using cached API: ${response.status}`);
-        }
+      if (supabaseError) {
+        throw supabaseError;
+      }
 
-        const result = await response.json();
+      if (data && data[0]) {
+        // Clear reply input and close reply form
+        setReplyContent("");
+        setActiveReplyTo(null);
         
-        if (result.data) {
-          // Clear reply input and close reply form
-          setReplyContent("");
-          setActiveReplyTo(null);
-          
-          // Refresh all comments to ensure consistency
-          await fetchComments();
-          
-          // Update the comment count
-          setCommentsCount(prev => prev + 1);
-          
-          // Update the post's comment count
-          try {
-            await supabase
-              .from('posts')
-              .update({ comments_count: commentsCount + 1 })
-              .eq('id', postId);
-          } catch (error) {
-            console.error('Error updating post comments count:', error);
-          }
-          return;
-        }
+        // Refresh all comments
+        await fetchComments();
         
-        throw new Error('No data returned from cached comments API');
-      } catch (error) {
-        console.warn("Couldn't use cached API for reply, falling back to direct Supabase:", error);
+        // Update counts
+        setCommentsCount(prev => prev + 1);
         
-        // Fallback to direct Supabase insertion
-        const { data, error: supabaseError } = await supabase
-          .from('comments')
-          .insert([commentData])
-          .select();
-
-        if (supabaseError) {
-          throw supabaseError;
-        }
-
-        if (data && data[0]) {
-          // Clear reply input and close reply form
-          setReplyContent("");
-          setActiveReplyTo(null);
-          
-          // Refresh all comments
-          await fetchComments();
-          
-          // Update counts
-          setCommentsCount(prev => prev + 1);
-          
-          try {
-            await supabase
-              .from('posts')
-              .update({ comments_count: commentsCount + 1 })
-              .eq('id', postId);
-          } catch (error) {
-            console.error('Error updating post comments count:', error);
-          }
+        try {
+          await supabase
+            .from('posts')
+            .update({ comments_count: commentsCount + 1 })
+            .eq('id', postId);
+        } catch (error) {
+          console.error('Error updating post comments count:', error);
         }
       }
     } catch (error) {
@@ -621,63 +530,35 @@ function PostPageContent({ id }: { id: string }) {
     const originalComments = [...comments];
 
     try {
-      const likeAction = isLiked ? 'unlike' : 'like';
-      
-      // Get access token and refresh token from AuthContext
-      const { accessToken, refreshToken } = await getAuthTokens();
-      
-      if (!accessToken) {
-        throw new Error('No access token available');
-      }
-      
-      const response = await fetch('/api/cached-comments', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...(refreshToken && { 'X-Refresh-Token': refreshToken }),
-        },
-        body: JSON.stringify({
-          commentId,
-          userId: user.id,
-          action: likeAction
-        }),
-      });
+      if (isLiked) {
+        // Unlike the comment - delete the like
+        const { error } = await supabase
+          .from('comment_likes')
+          .delete()
+          .eq('comment_id', commentId)
+          .eq('user_id', user.id);
 
-      if (!response.ok) {
-        // If already liked (409 conflict) just ignore and keep optimistic update
-        if (response.status === 409) {
-          setIsSubmittingCommentLike(false);
-          return;
+        if (error) {
+          throw error;
         }
-        throw new Error(`Failed to ${likeAction} comment: ${response.status}`);
-      }
+      } else {
+        // Like the comment - insert new like
+        const { error } = await supabase
+          .from('comment_likes')
+          .insert({
+            comment_id: commentId,
+            user_id: user.id,
+            created_at: new Date().toISOString()
+          });
 
-      const result = await response.json();
-      
-      // Update UI with actual data from server
-      if (result.likes_count !== undefined) {
-        setComments(prevComments => {
-          const updateCommentInTree = (comments: CommentData[]): CommentData[] => {
-            return comments.map(comment => {
-              if (comment.id === commentId) {
-                return {
-                  ...comment,
-                  likes_count: result.likes_count,
-                  liked: likeAction === 'like' // Ensure liked status matches server action
-                };
-              } else if (comment.replies && comment.replies.length > 0) {
-                return {
-                  ...comment,
-                  replies: updateCommentInTree(comment.replies)
-                };
-              }
-              return comment;
-            });
-          };
-          
-          return updateCommentInTree(prevComments);
-        });
+        if (error) {
+          // If already liked (409 conflict) just ignore
+          if (error.code === '23505') { // Unique violation error code
+            setIsSubmittingCommentLike(false);
+            return;
+          }
+          throw error;
+        }
       }
 
       // Refresh comments to ensure consistency with server state
