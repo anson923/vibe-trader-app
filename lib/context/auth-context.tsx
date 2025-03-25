@@ -5,6 +5,11 @@ import { Session, User } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
 
+type AuthTokens = {
+    accessToken: string | null;
+    refreshToken: string | null;
+}
+
 type AuthContextType = {
     user: User | null
     session: Session | null
@@ -12,6 +17,8 @@ type AuthContextType = {
     signUp: (email: string, password: string, username: string) => Promise<void>
     signIn: (email: string, password: string) => Promise<void>
     signOut: () => Promise<void>
+    getAccessToken: () => Promise<string | null>
+    getAuthTokens: () => Promise<AuthTokens>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -127,6 +134,79 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setIsLoading(false)
         }
     }
+    
+    /**
+     * Helper method to get the current access token from session
+     * Refreshes the session if needed
+     * @deprecated Use getAuthTokens instead for complete token information
+     */
+    const getAccessToken = async (): Promise<string | null> => {
+        try {
+            // Check if we have a valid session with an access token
+            if (session?.access_token) {
+                return session.access_token;
+            }
+            
+            // Otherwise, get the latest session
+            const { data, error } = await supabase.auth.getSession();
+            
+            if (error) {
+                console.error('Error getting access token:', error);
+                return null;
+            }
+            
+            if (data.session) {
+                // Update our local session state
+                setSession(data.session);
+                setUser(data.session.user);
+                return data.session.access_token;
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('Error retrieving access token:', error);
+            return null;
+        }
+    }
+    
+    /**
+     * Helper method to get both the access token and refresh token
+     * Returns an object with both tokens or null if not available
+     */
+    const getAuthTokens = async (): Promise<AuthTokens> => {
+        try {
+            // Check if we have a valid session with tokens
+            if (session?.access_token) {
+                return {
+                    accessToken: session.access_token,
+                    refreshToken: session.refresh_token || null
+                };
+            }
+            
+            // Otherwise, get the latest session
+            const { data, error } = await supabase.auth.getSession();
+            
+            if (error) {
+                console.error('Error getting auth tokens:', error);
+                return { accessToken: null, refreshToken: null };
+            }
+            
+            if (data.session) {
+                // Update our local session state
+                setSession(data.session);
+                setUser(data.session.user);
+                return {
+                    accessToken: data.session.access_token,
+                    refreshToken: data.session.refresh_token || null
+                };
+            }
+            
+            return { accessToken: null, refreshToken: null };
+        } catch (error) {
+            console.error('Error retrieving auth tokens:', error);
+            return { accessToken: null, refreshToken: null };
+        }
+    }
 
     const value = {
         user,
@@ -135,6 +215,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUp,
         signIn,
         signOut,
+        getAccessToken,
+        getAuthTokens,
     }
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

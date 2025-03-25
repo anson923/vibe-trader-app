@@ -141,9 +141,17 @@ export default function PostCard({
     if (isSubmitting) return
 
     setIsSubmitting(true)
+    
+    // Store original state to restore on error
+    const originalLiked = liked
+    const originalLikesCount = likesCount
+    
+    // Optimistically update UI
+    setLiked(!liked)
+    setLikesCount(prev => !liked ? prev + 1 : Math.max(0, prev - 1))
 
     try {
-      if (liked) {
+      if (originalLiked) {
         // Unlike the post
         const { error } = await supabase
           .from('likes')
@@ -154,9 +162,6 @@ export default function PostCard({
         if (error) {
           throw error
         }
-
-        setLiked(false)
-        setLikesCount(prev => Math.max(0, prev - 1))
       } else {
         // Like the post
         const { error } = await supabase
@@ -169,12 +174,12 @@ export default function PostCard({
         if (error) {
           throw error
         }
-
-        setLiked(true)
-        setLikesCount(prev => prev + 1)
       }
     } catch (error) {
       logger.error('Error toggling like:', error)
+      // Revert UI on error
+      setLiked(originalLiked)
+      setLikesCount(originalLikesCount)
     } finally {
       setIsSubmitting(false)
     }

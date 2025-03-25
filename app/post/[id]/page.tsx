@@ -32,6 +32,11 @@ interface CommentData {
   username: string
   avatar_url: string
   created_at: string
+  parent_comment_id?: number
+  level?: number
+  likes_count: number
+  liked?: boolean
+  replies?: CommentData[]
 }
 
 // Define type for the stock data returned from getStockDataForPost
@@ -60,7 +65,7 @@ type PageProps = {
 
 function PostPageContent({ id }: { id: string }) {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, getAccessToken, getAuthTokens } = useAuth()
   const [post, setPost] = useState<PostData | null>(null)
   const [comments, setComments] = useState<CommentData[]>([])
   const [newComment, setNewComment] = useState("")
@@ -72,6 +77,9 @@ function PostPageContent({ id }: { id: string }) {
   const [isSubmittingComment, setIsSubmittingComment] = useState(false)
   const [stockData, setStockData] = useState<StockData[]>([])
   const [isLoadingComments, setIsLoadingComments] = useState(true)
+  const [activeReplyTo, setActiveReplyTo] = useState<number | null>(null)
+  const [replyContent, setReplyContent] = useState<string>("")
+  const [isSubmittingCommentLike, setIsSubmittingCommentLike] = useState(false)
 
   // Convert string id to number
   const postId = parseInt(id)
@@ -119,7 +127,7 @@ function PostPageContent({ id }: { id: string }) {
     try {
       // First try to get from cached API
       try {
-        const response = await fetch(`/api/cached-comments?postId=${postId}`);
+        const response = await fetch(`/api/cached-comments?postId=${postId}${user ? `&userId=${user.id}` : ''}`);
         
         if (!response.ok) {
           throw new Error(`Failed to fetch comments from cached API: ${response.statusText}`);
@@ -145,10 +153,15 @@ function PostPageContent({ id }: { id: string }) {
           content,
           created_at,
           user_id,
-          profiles:user_id (id, username, name, avatar, profit)
+          post_id,
+          username,
+          avatar_url,
+          parent_comment_id,
+          level,
+          likes_count
         `)
         .eq('post_id', postId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false });
 
       if (error) {
         throw error;
@@ -157,19 +170,85 @@ function PostPageContent({ id }: { id: string }) {
       if (data) {
         logger.info('Comment data structure:', data[0]); // Log first comment for structure
         
-        // Simplified mapping based on observed structure
+        // Map to track liked comments if user is authenticated
+        let likedCommentIds = new Set<number>();
+        
+        if (user) {
+          // Check which comments the user has liked
+          const { data: likedComments, error: likesError } = await supabase
+            .from('comment_likes')
+            .select('comment_id')
+            .eq('user_id', user.id);
+            
+          if (!likesError && likedComments) {
+            likedCommentIds = new Set(likedComments.map(like => like.comment_id));
+          }
+        }
+        
+        // Map comments directly without nested profiles handling
         const commentsData = data.map(comment => ({
           id: comment.id,
           content: comment.content,
           created_at: comment.created_at,
           user_id: comment.user_id,
-          post_id: postId as number,
-          username: comment.profiles?.name || 'User',
-          avatar_url: comment.profiles?.avatar || '/placeholder.svg'
+          post_id: comment.post_id || postId,
+          username: comment.username || 'User',
+          avatar_url: comment.avatar_url || '/placeholder.svg',
+          parent_comment_id: comment.parent_comment_id || null,
+          level: comment.level || 0,
+          likes_count: comment.likes_count || 0,
+          liked: likedCommentIds.has(comment.id),
+          replies: []
         }));
         
+        // Transform flat comments into a tree structure
+        const rootComments: CommentData[] = [];
+        const commentMap = new Map<number, CommentData>();
+        
+        // First, create a map of all comments
+        commentsData.forEach(comment => {
+          commentMap.set(comment.id, comment);
+        });
+        
+        // Then, build the tree structure
+        commentsData.forEach(comment => {
+          if (comment.parent_comment_id) {
+            // This is a reply, add it to parent's replies array
+            const parentComment = commentMap.get(comment.parent_comment_id);
+            if (parentComment) {
+              if (!parentComment.replies) parentComment.replies = [];
+              parentComment.replies.push(comment);
+            } else {
+              // If parent doesn't exist (shouldn't happen), add as root
+              rootComments.push(comment);
+            }
+          } else {
+            // Root level comment
+            rootComments.push(comment);
+          }
+        });
+        
+        // Sort root comments by created_at (newest first)
+        rootComments.sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        
+        // Sort replies by created_at (oldest first)
+        const sortReplies = (comments: CommentData[]) => {
+          comments.forEach(comment => {
+            if (comment.replies && comment.replies.length > 0) {
+              comment.replies.sort((a, b) => 
+                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+              );
+              sortReplies(comment.replies);
+            }
+          });
+        };
+        
+        sortReplies(rootComments);
+        
         setIsLoadingComments(false);
-        setComments(commentsData);
+        setComments(rootComments);
       }
     } catch (error) {
       logger.error('Error fetching comments fallback:', error);
@@ -248,9 +327,17 @@ function PostPageContent({ id }: { id: string }) {
     if (isSubmittingLike) return
 
     setIsSubmittingLike(true)
+    
+    // Store original state to restore on error
+    const originalLiked = liked
+    const originalLikesCount = likesCount
+    
+    // Optimistically update UI
+    setLiked(!liked)
+    setLikesCount(prev => !liked ? prev + 1 : Math.max(0, prev - 1))
 
     try {
-      if (liked) {
+      if (originalLiked) {
         // Unlike the post
         const { error } = await supabase
           .from('likes')
@@ -261,9 +348,6 @@ function PostPageContent({ id }: { id: string }) {
         if (error) {
           throw error
         }
-
-        setLiked(false)
-        setLikesCount(prev => Math.max(0, prev - 1))
       } else {
         // Like the post
         const { error } = await supabase
@@ -276,12 +360,12 @@ function PostPageContent({ id }: { id: string }) {
         if (error) {
           throw error
         }
-
-        setLiked(true)
-        setLikesCount(prev => prev + 1)
       }
     } catch (error) {
       console.error('Error toggling like:', error)
+      // Revert UI on error
+      setLiked(originalLiked)
+      setLikesCount(originalLikesCount)
     } finally {
       setIsSubmittingLike(false)
     }
@@ -307,7 +391,9 @@ function PostPageContent({ id }: { id: string }) {
         content: newComment.trim(),
         username: user.user_metadata?.username || "Anonymous",
         avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg?height=40&width=40",
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        parent_comment_id: null, // This is a top-level comment
+        level: 0
       };
 
       // First try to use the cached API endpoint
@@ -392,6 +478,222 @@ function PostPageContent({ id }: { id: string }) {
     }
   }
 
+  // Handle submit reply to a comment
+  const handleSubmitReply = async (parentCommentId: number, parentLevel: number = 0) => {
+    if (!user) {
+      router.push('/login')
+      return
+    }
+
+    if (!replyContent.trim() || isSubmittingComment) return
+
+    setIsSubmittingComment(true)
+
+    try {
+      const commentData = {
+        post_id: postId,
+        user_id: user.id,
+        content: replyContent.trim(),
+        username: user.user_metadata?.username || "Anonymous",
+        avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg?height=40&width=40",
+        created_at: new Date().toISOString(),
+        parent_comment_id: parentCommentId,
+        level: parentLevel + 1 // Increment level for replies
+      };
+
+      try {
+        const response = await fetch('/api/cached-comments', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(commentData),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to add reply using cached API: ${response.status}`);
+        }
+
+        const result = await response.json();
+        
+        if (result.data) {
+          // Clear reply input and close reply form
+          setReplyContent("");
+          setActiveReplyTo(null);
+          
+          // Refresh all comments to ensure consistency
+          await fetchComments();
+          
+          // Update the comment count
+          setCommentsCount(prev => prev + 1);
+          
+          // Update the post's comment count
+          try {
+            await supabase
+              .from('posts')
+              .update({ comments_count: commentsCount + 1 })
+              .eq('id', postId);
+          } catch (error) {
+            console.error('Error updating post comments count:', error);
+          }
+          return;
+        }
+        
+        throw new Error('No data returned from cached comments API');
+      } catch (error) {
+        console.warn("Couldn't use cached API for reply, falling back to direct Supabase:", error);
+        
+        // Fallback to direct Supabase insertion
+        const { data, error: supabaseError } = await supabase
+          .from('comments')
+          .insert([commentData])
+          .select();
+
+        if (supabaseError) {
+          throw supabaseError;
+        }
+
+        if (data && data[0]) {
+          // Clear reply input and close reply form
+          setReplyContent("");
+          setActiveReplyTo(null);
+          
+          // Refresh all comments
+          await fetchComments();
+          
+          // Update counts
+          setCommentsCount(prev => prev + 1);
+          
+          try {
+            await supabase
+              .from('posts')
+              .update({ comments_count: commentsCount + 1 })
+              .eq('id', postId);
+          } catch (error) {
+            console.error('Error updating post comments count:', error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error adding reply:', error)
+    } finally {
+      setIsSubmittingComment(false)
+    }
+  }
+
+  // Handle liking a comment
+  const handleCommentLike = async (commentId: number, isLiked: boolean) => {
+    if (!user) {
+      router.push('/login')
+      return
+    }
+
+    if (isSubmittingCommentLike) return
+
+    setIsSubmittingCommentLike(true)
+    
+    // Optimistically update UI first
+    setComments(prevComments => {
+      // Helper function to update comment in a nested structure
+      const updateCommentInTree = (comments: CommentData[]): CommentData[] => {
+        return comments.map(comment => {
+          if (comment.id === commentId) {
+            // Update this comment
+            return {
+              ...comment,
+              liked: !isLiked,
+              likes_count: isLiked ? Math.max(0, comment.likes_count - 1) : comment.likes_count + 1
+            };
+          } else if (comment.replies && comment.replies.length > 0) {
+            // Check in replies
+            return {
+              ...comment,
+              replies: updateCommentInTree(comment.replies)
+            };
+          }
+          return comment;
+        });
+      };
+      
+      return updateCommentInTree(prevComments);
+    });
+
+    // Save the original comments state to restore on error
+    const originalComments = [...comments];
+
+    try {
+      const likeAction = isLiked ? 'unlike' : 'like';
+      
+      // Get access token and refresh token from AuthContext
+      const { accessToken, refreshToken } = await getAuthTokens();
+      
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const response = await fetch('/api/cached-comments', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          // Add authorization header with both tokens if available
+          ...(accessToken && { 
+            'Authorization': `Bearer ${accessToken}`,
+            'X-Refresh-Token': refreshToken || ''
+          }),
+        },
+        body: JSON.stringify({
+          commentId,
+          userId: user.id,
+          action: likeAction
+        }),
+      });
+
+      if (!response.ok) {
+        // If already liked (409 conflict) just ignore
+        if (response.status === 409) {
+          setIsSubmittingCommentLike(false);
+          return;
+        }
+        throw new Error(`Failed to ${likeAction} comment: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      // Fine-tune the UI with actual data from server if needed
+      if (result.likes_count !== undefined) {
+        setComments(prevComments => {
+          // Helper function to update comment in a nested structure
+          const updateCommentInTree = (comments: CommentData[]): CommentData[] => {
+            return comments.map(comment => {
+              if (comment.id === commentId) {
+                // Update this comment with exact count from server
+                return {
+                  ...comment,
+                  likes_count: result.likes_count
+                };
+              } else if (comment.replies && comment.replies.length > 0) {
+                // Check in replies
+                return {
+                  ...comment,
+                  replies: updateCommentInTree(comment.replies)
+                };
+              }
+              return comment;
+            });
+          };
+          
+          return updateCommentInTree(prevComments);
+        });
+      }
+    } catch (error) {
+      console.error(`Error ${isLiked ? 'unliking' : 'liking'} comment:`, error);
+      // Revert UI to original state on error
+      setComments(originalComments);
+    } finally {
+      setIsSubmittingCommentLike(false);
+    }
+  }
+
   // Format date and time
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -403,6 +705,113 @@ function PostPageContent({ id }: { id: string }) {
       minute: '2-digit'
     })
   }
+
+  // Define the CommentItem component for rendering comments and replies
+  const CommentItem = ({ comment, level = 0 }: { comment: CommentData, level?: number }) => {
+    const isReplyActive = activeReplyTo === comment.id;
+    const hasReplies = comment.replies && comment.replies.length > 0;
+    
+    return (
+      <div className="comment-thread">
+        <Card key={comment.id} className="border-gray-700 bg-gray-800">
+          <CardHeader className="flex flex-row items-center gap-3 p-4">
+            <Avatar className="h-8 w-8">
+              <AvatarImage src={comment.avatar_url || "/placeholder.svg?height=32&width=32"} alt={`@${comment.username}`} />
+              <AvatarFallback className="bg-gray-700">{comment.username.charAt(0)}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <p className="font-medium">{comment.username}</p>
+              <p className="text-xs text-gray-400">
+                @{comment.username.toLowerCase().replace(/\s+/g, '')} • {formatDate(comment.created_at)}
+              </p>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <p>{comment.content}</p>
+          </CardContent>
+          <CardFooter className="flex justify-start gap-4 p-3 pt-1 border-t border-gray-700">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`gap-1 ${comment.liked ? 'text-red-500' : ''}`}
+              onClick={() => handleCommentLike(comment.id, !!comment.liked)}
+              disabled={isSubmittingCommentLike}
+            >
+              <Heart className={`h-4 w-4 ${comment.liked ? 'fill-current' : ''}`} />
+              <span>{comment.likes_count}</span>
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1"
+              onClick={() => {
+                if (isReplyActive) {
+                  setActiveReplyTo(null);
+                } else {
+                  setActiveReplyTo(comment.id);
+                  setReplyContent("");
+                }
+              }}
+            >
+              <MessageSquare className="h-4 w-4" />
+              <span>Reply</span>
+            </Button>
+          </CardFooter>
+          
+          {/* Reply form */}
+          {isReplyActive && user && (
+            <div className="px-4 pb-4">
+              <div className="pl-6 border-l-2 border-gray-700">
+                <div className="flex items-center gap-3 mb-2">
+                  <Avatar className="h-6 w-6">
+                    <AvatarImage 
+                      src={user.user_metadata?.avatar_url || "/placeholder.svg?height=24&width=24"} 
+                      alt={user.user_metadata?.username || "User"} 
+                    />
+                    <AvatarFallback className="bg-gray-700 text-xs">
+                      {user.user_metadata?.username ? user.user_metadata.username.substring(0, 1).toUpperCase() : "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <Textarea
+                    placeholder={`Reply to ${comment.username}...`}
+                    className="flex-1 min-h-16 bg-gray-700/30 border-gray-600 text-sm"
+                    value={replyContent}
+                    onChange={(e) => setReplyContent(e.target.value)}
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={() => setActiveReplyTo(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    disabled={isSubmittingComment || !replyContent.trim()}
+                    onClick={() => handleSubmitReply(comment.id, comment.level || 0)}
+                  >
+                    {isSubmittingComment ? "Replying..." : "Reply"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
+        
+        {/* Render replies */}
+        {hasReplies && (
+          <div className="ml-6 mt-2 space-y-3 border-l-2 border-gray-700 pl-4">
+            {comment.replies?.map(reply => (
+              <CommentItem key={reply.id} comment={reply} level={(level || 0) + 1} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -542,23 +951,7 @@ function PostPageContent({ id }: { id: string }) {
         {comments.length > 0 ? (
           <div className="space-y-4">
             {comments.map((comment) => (
-              <Card key={comment.id} className="border-gray-700 bg-gray-800">
-                <CardHeader className="flex flex-row items-center gap-3 p-4">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={comment.avatar_url || "/placeholder.svg?height=32&width=32"} alt={`@${comment.username}`} />
-                    <AvatarFallback className="bg-gray-700">{comment.username.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <p className="font-medium">{comment.username}</p>
-                    <p className="text-xs text-gray-400">
-                      @{comment.username.toLowerCase().replace(/\s+/g, '')} • {formatDate(comment.created_at)}
-                    </p>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 pt-0">
-                  <p>{comment.content}</p>
-                </CardContent>
-              </Card>
+              <CommentItem key={comment.id} comment={comment} />
             ))}
           </div>
         ) : (

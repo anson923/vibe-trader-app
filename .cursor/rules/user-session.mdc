@@ -1,0 +1,9 @@
+---
+description: Whenever you need to access or set anytihn about user session, cookies, auth sessions.
+globs: 
+alwaysApply: false
+---
+
+# Your rule content
+
+Please make sure to always use single source [auth-context.tsx](mdc:lib/context/auth-context.tsx) script to handle anything about user session, cookies, auth sessions.
