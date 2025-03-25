@@ -63,6 +63,67 @@ type PageProps = {
   params: { id: string }
 }
 
+// Add this new component before the PostPageContent component
+const ReplyForm = ({ 
+  user, 
+  commentUsername, 
+  onSubmit, 
+  onCancel, 
+  isSubmitting 
+}: { 
+  user: any;
+  commentUsername: string;
+  onSubmit: (content: string) => void;
+  onCancel: () => void;
+  isSubmitting: boolean;
+}) => {
+  const [replyContent, setReplyContent] = useState("");
+
+  return (
+    <div className="px-4 pb-4">
+      <div className="pl-6 border-l-2 border-gray-700">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="mr-2 flex items-start pt-1.5">
+            <Avatar className="h-8 w-8">
+              <AvatarImage 
+                src={user.user_metadata?.avatar_url || "/placeholder.svg"} 
+                alt="Your avatar" 
+                onError={(e) => {
+                  console.log(`[PostDetail] Avatar image error for current user, using fallback`);
+                  e.currentTarget.src = '/placeholder.svg';
+                }}
+              />
+            </Avatar>
+          </div>
+          <span className="text-gray-400 text-sm">You</span>
+        </div>
+        <Textarea
+          placeholder={`Reply to ${commentUsername}...`}
+          className="flex-1 min-h-16 bg-gray-700/30 border-gray-600 text-sm"
+          value={replyContent}
+          onChange={(e) => setReplyContent(e.target.value)}
+        />
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button 
+          size="sm" 
+          variant="outline" 
+          onClick={onCancel}
+        >
+          Cancel
+        </Button>
+        <Button 
+          size="sm" 
+          disabled={isSubmitting || !replyContent.trim()}
+          onClick={() => onSubmit(replyContent)}
+        >
+          {isSubmitting ? "Replying..." : "Reply"}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 function PostPageContent({ id }: { id: string }) {
   console.log(`[PostDetail] Rendering PostDetail for Post ID ${id}`);
 
@@ -462,19 +523,19 @@ function PostPageContent({ id }: { id: string }) {
   }
 
   // Handle submit reply to a comment
-  const handleSubmitReply = async (parentCommentId: number, parentLevel: number = 0) => {
+  const handleSubmitReply = async (parentCommentId: number, parentLevel: number = 0, content: string) => {
     if (!user) {
       router.push('/login')
       return
     }
 
-    if (!replyContent.trim() || isSubmittingComment) return
+    if (!content.trim() || isSubmittingComment) return
 
     setIsSubmittingComment(true)
 
     try {
       const commentData = {
-        content: replyContent.trim(),
+        content: content.trim(),
         user_id: user.id,
         post_id: postId,
         username: user.user_metadata?.username || "Anonymous User",
@@ -495,8 +556,7 @@ function PostPageContent({ id }: { id: string }) {
       }
 
       if (data && data[0]) {
-        // Clear reply input and close reply form
-        setReplyContent("");
+        // Close reply form
         setActiveReplyTo(null);
         
         // Refresh all comments
@@ -621,6 +681,10 @@ function PostPageContent({ id }: { id: string }) {
     const isReplyActive = activeReplyTo === comment.id;
     const hasReplies = comment.replies && comment.replies.length > 0;
     
+    const handleReplySubmit = (content: string) => {
+      handleSubmitReply(comment.id, comment.level || 0, content);
+    };
+    
     return (
       <div className="comment-thread">
         <Card key={comment.id} className="border-gray-700 bg-gray-800">
@@ -669,7 +733,6 @@ function PostPageContent({ id }: { id: string }) {
                   setActiveReplyTo(null);
                 } else {
                   setActiveReplyTo(comment.id);
-                  setReplyContent("");
                 }
               }}
             >
@@ -680,47 +743,13 @@ function PostPageContent({ id }: { id: string }) {
           
           {/* Reply form */}
           {isReplyActive && user && (
-            <div className="px-4 pb-4">
-              <div className="pl-6 border-l-2 border-gray-700">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="mr-2 flex items-start pt-1.5">
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage 
-                        src={user.user_metadata?.avatar_url || "/placeholder.svg"} 
-                        alt="Your avatar" 
-                        onError={(e) => {
-                          console.log(`[PostDetail] Avatar image error for current user, using fallback`);
-                          e.currentTarget.src = '/placeholder.svg';
-                        }}
-                      />
-                    </Avatar>
-                  </div>
-                  <span className="text-gray-400 text-sm">You</span>
-                </div>
-                <Textarea
-                  placeholder={`Reply to ${comment.username}...`}
-                  className="flex-1 min-h-16 bg-gray-700/30 border-gray-600 text-sm"
-                  value={replyContent}
-                  onChange={(e) => setReplyContent(e.target.value)}
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  onClick={() => setActiveReplyTo(null)}
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  size="sm" 
-                  disabled={isSubmittingComment || !replyContent.trim()}
-                  onClick={() => handleSubmitReply(comment.id, comment.level || 0)}
-                >
-                  {isSubmittingComment ? "Replying..." : "Reply"}
-                </Button>
-              </div>
-            </div>
+            <ReplyForm
+              user={user}
+              commentUsername={comment.username}
+              onSubmit={handleReplySubmit}
+              onCancel={() => setActiveReplyTo(null)}
+              isSubmitting={isSubmittingComment}
+            />
           )}
         </Card>
         
