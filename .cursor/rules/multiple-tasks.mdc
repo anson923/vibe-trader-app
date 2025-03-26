@@ -1,0 +1,9 @@
+---
+description: When you have a complex request
+globs: 
+alwaysApply: false
+---
+
+# Your rule content
+
+When you have a complex request, make sure to use sequentialthinking mcp tool to break down for easier steps and instruction.

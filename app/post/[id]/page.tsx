@@ -167,9 +167,23 @@ function PostPageContent({ id }: { id: string }) {
   const [activeReplyTo, setActiveReplyTo] = useState<number | null>(null)
   const [replyContent, setReplyContent] = useState<string>("")
   const [isSubmittingCommentLike, setIsSubmittingCommentLike] = useState(false)
+  const [expandedComments, setExpandedComments] = useState<Set<number>>(new Set())
 
   // Convert string id to number
   const postId = parseInt(id)
+
+  // Add function to handle comment expansion
+  const toggleCommentExpanded = (commentId: number) => {
+    setExpandedComments(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(commentId)) {
+        newSet.delete(commentId);
+      } else {
+        newSet.add(commentId);
+      }
+      return newSet;
+    });
+  };
 
   // Fetch post data and comments
   useEffect(() => {
@@ -222,6 +236,9 @@ function PostPageContent({ id }: { id: string }) {
     setIsLoadingComments(true);
 
     try {
+      // Store current expanded state
+      const currentExpandedState = new Set(expandedComments);
+
       // Direct query to Supabase
       const { data: commentsData, error: commentsError } = await supabase
         .from('comments')
@@ -274,7 +291,7 @@ function PostPageContent({ id }: { id: string }) {
           likes_count: comment.likes_count || 0,
           liked: likedCommentIds.has(comment.id),
           replies: [],
-          isExpanded: false,
+          isExpanded: currentExpandedState.has(comment.id),
           totalReplies: 0
         }));
 
@@ -602,6 +619,13 @@ function PostPageContent({ id }: { id: string }) {
         // Close reply form
         setActiveReplyTo(null);
 
+        // Automatically expand the parent comment to show the new reply
+        setExpandedComments(prev => {
+          const newSet = new Set(prev);
+          newSet.add(parentCommentId);
+          return newSet;
+        });
+
         // Refresh all comments
         await fetchComments();
 
@@ -622,7 +646,7 @@ function PostPageContent({ id }: { id: string }) {
     } finally {
       setIsSubmittingComment(false)
     }
-  }
+  };
 
   // Handle liking a comment
   const handleCommentLike = async (commentId: number, isLiked: boolean) => {
@@ -723,14 +747,10 @@ function PostPageContent({ id }: { id: string }) {
   const CommentItem = ({ comment, level = 0 }: { comment: CommentData, level?: number }) => {
     const isReplyActive = activeReplyTo === comment.id;
     const hasReplies = comment.replies && comment.replies.length > 0;
-    const [isExpanded, setIsExpanded] = useState(false);
+    const isExpanded = expandedComments.has(comment.id);
 
     const handleReplySubmit = (content: string) => {
       handleSubmitReply(comment.id, comment.level || 0, content);
-    };
-
-    const toggleExpanded = () => {
-      setIsExpanded(!isExpanded);
     };
 
     return (
@@ -794,7 +814,7 @@ function PostPageContent({ id }: { id: string }) {
               variant="ghost"
               size="sm"
               className="gap-1"
-              onClick={toggleExpanded}
+              onClick={() => toggleCommentExpanded(comment.id)}
             >
               <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
               <span>{comment.replies?.length} {comment.replies?.length === 1 ? 'reply' : 'replies'}</span>
