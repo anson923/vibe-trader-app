@@ -3,11 +3,19 @@
 import { useEffect, useState } from "react"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts"
 
-interface StockChartProps {
-  ticker: string
+interface ChartData {
+  date: string;
+  price: number;
+  volume?: number;
 }
 
-export default function StockChart({ ticker }: StockChartProps) {
+interface StockChartProps {
+  data: ChartData[];
+  onTimeframeChange: (timeframe: string) => void;
+  selectedTimeframe: string;
+}
+
+export default function StockChart({ data, onTimeframeChange, selectedTimeframe }: StockChartProps) {
   const [chartData, setChartData] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -19,7 +27,7 @@ export default function StockChart({ ticker }: StockChartProps) {
       let basePrice = 0
 
       // Set a base price based on ticker
-      switch (ticker) {
+      switch (selectedTimeframe) {
         case "AAPL":
           basePrice = 180
           break
@@ -70,7 +78,7 @@ export default function StockChart({ ticker }: StockChartProps) {
       setChartData(generateMockData())
       setIsLoading(false)
     }, 500)
-  }, [ticker])
+  }, [selectedTimeframe])
 
   if (isLoading) {
     return (

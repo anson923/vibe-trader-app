@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabase"
 import { StockBadge } from "@/components/stock-badge"
 import { getStockDataForPost, logger } from "@/lib/stock-utils"
 import { DeletePostButton } from "@/components/delete-post-button"
+import Image from "next/image"
 
 interface PostData {
   id: number
@@ -912,10 +913,8 @@ function PostPageContent({ id }: { id: string }) {
               <AvatarImage
                 src={comment.avatar_url || "/user_icon.svg"}
                 alt={`@${comment.username}`}
-                onError={(e) => {
-                  console.log(`[PostDetail] Avatar image error for comment author ${comment.username}, using fallback`);
-                  e.currentTarget.src = '/user_icon.svg';
-                }}
+                width={32}
+                height={32}
               />
               <AvatarFallback className="bg-gray-700 text-gray-100">{comment.username.charAt(0).toUpperCase()}</AvatarFallback>
             </Avatar>
@@ -1080,10 +1079,8 @@ function PostPageContent({ id }: { id: string }) {
               <AvatarImage
                 src={post.avatar_url || "/user_icon.svg"}
                 alt={`@${post.username}`}
-                onError={(e) => {
-                  console.log(`[PostDetail] Avatar image error for post author ${post.username}, using fallback`);
-                  e.currentTarget.src = '/user_icon.svg';
-                }}
+                width={32}
+                height={32}
               />
               <AvatarFallback className="bg-gray-700 text-gray-100">{post.username.charAt(0).toUpperCase()}</AvatarFallback>
             </Avatar>
@@ -1160,10 +1157,8 @@ function PostPageContent({ id }: { id: string }) {
                   <AvatarImage
                     src={user.user_metadata?.avatar_url || "/user_icon.svg"}
                     alt="Your avatar"
-                    onError={(e) => {
-                      console.log(`[PostDetail] Avatar image error for comment form, using fallback`);
-                      e.currentTarget.src = '/user_icon.svg';
-                    }}
+                    width={32}
+                    height={32}
                   />
                   <AvatarFallback className="bg-gray-700 text-gray-100">{user.email?.charAt(0).toUpperCase() || '?'}</AvatarFallback>
                 </Avatar>
