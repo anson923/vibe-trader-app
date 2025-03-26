@@ -1,9 +1,0 @@
----
-description: 
-globs: 
-alwaysApply: true
----
-
-# Your rule content
-
-Always use sequentialthinking mcp tool to break down steps for easier documentation of instruction and implementation.
