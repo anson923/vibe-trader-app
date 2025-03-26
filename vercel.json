@@ -1,0 +1,22 @@
+{
+    "version": 2,
+    "builds": [
+        {
+            "src": "package.json",
+            "use": "@vercel/next"
+        }
+    ],
+    "github": {
+        "silent": true
+    },
+    "buildCommand": "npm run build",
+    "devCommand": "npm run dev",
+    "installCommand": "npm install",
+    "outputDirectory": ".next",
+    "git": {
+        "deploymentEnabled": {
+            "main": true,
+            "dev": true
+        }
+    }
+}
