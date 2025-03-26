@@ -33,7 +33,7 @@ interface Comment {
 }
 
 interface CommentSectionProps {
-  _postId: number
+  postId: number
 }
 
 // Sample stock data
@@ -47,7 +47,7 @@ const stocksDatabase: Record<string, StockInfo> = {
   META: { ticker: "META", name: "Meta Platforms Inc.", change: -0.7 },
 }
 
-export default function CommentSection({ _postId }: CommentSectionProps) {
+export default function CommentSection({ postId }: CommentSectionProps) {
   const [comments, setComments] = useState<Comment[]>([
     {
       id: 1,

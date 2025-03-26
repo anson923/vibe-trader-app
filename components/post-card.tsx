@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import Image from "next/image"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
@@ -261,15 +260,13 @@ export default function PostCard({
           <AvatarImage
             src={user.avatar.startsWith('/') ? user.avatar : `/avatars/${user.avatar}`}
             alt={`@${user.username}`}
-            width={32}
-            height={32}
             onError={(e) => {
               // If the image fails to load, set the source to our placeholder
               console.log(`[PostCard] Avatar image error for ${user.username}, using fallback`);
               e.currentTarget.src = '/user_icon.svg';
             }}
           />
-          <AvatarFallback className="bg-gray-700 text-gray-100">{user.name.charAt(0).toUpperCase()}</AvatarFallback>
+          <AvatarFallback className="bg-gray-700">{user.name.charAt(0)}</AvatarFallback>
         </Avatar>
         <div className="flex-1">
           <div className="flex items-center gap-2">

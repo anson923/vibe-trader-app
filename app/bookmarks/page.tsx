@@ -1,6 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import PostCard from "@/components/post-card"
-import { Bookmark } from "lucide-react"
 
 export default function BookmarksPage() {
   const bookmarkedPosts = [
@@ -91,11 +90,6 @@ export default function BookmarksPage() {
             ))}
         </TabsContent>
       </Tabs>
-
-      <div className="text-center py-10 text-gray-400">
-        <Bookmark className="h-10 w-10 mx-auto mb-2 opacity-50" />
-        <p>You haven&apos;t bookmarked any posts yet</p>
-      </div>
     </div>
   )
 }

@@ -10,7 +10,6 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/context/auth-context"
 import { supabase } from "@/lib/supabase"
 import { extractStockTickers, fetchMultipleStockData, saveStockData } from "@/lib/stock-utils"
-import Image from "next/image"
 
 export default function CreatePostPage() {
   const router = useRouter()

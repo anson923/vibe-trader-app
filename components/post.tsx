@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Heart, MessageSquare, Share } from "lucide-react"
-import Image from "next/image"
 
 interface PostProps {
   post: {
@@ -57,13 +56,8 @@ export default function Post({ post }: PostProps) {
     <Card className="border-university-secondary/20 shadow-sm">
       <CardHeader className="flex flex-row items-start gap-4 p-4 pb-0">
         <Avatar className="h-10 w-10 border border-university-secondary/20">
-          <AvatarImage
-            src={post.author.avatar || "/user_icon.svg"}
-            alt={`@${post.author.username}`}
-            width={32}
-            height={32}
-          />
-          <AvatarFallback className="bg-gray-700 text-gray-100">{post.author.username.charAt(0).toUpperCase()}</AvatarFallback>
+          <AvatarImage src={post.author.avatar} alt={post.author.name} />
+          <AvatarFallback>{post.author.name.charAt(0)}</AvatarFallback>
         </Avatar>
         <div className="flex-1">
           <div className="flex items-center justify-between">

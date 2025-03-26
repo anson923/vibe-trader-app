@@ -13,26 +13,6 @@ interface StockPageProps {
   }
 }
 
-interface StockData {
-  ticker: string;
-  price: number;
-  priceChange: number;
-  priceChangePercentage: number;
-  historicalData?: HistoricalDataPoint[];
-}
-
-interface HistoricalDataPoint {
-  date: string;
-  price: number;
-  volume?: number;
-}
-
-interface ChartProps {
-  data: HistoricalDataPoint[];
-  onTimeframeChange: (timeframe: string) => void;
-  selectedTimeframe: string;
-}
-
 // Component that receives the unwrapped ticker
 function StockPageContent({ ticker }: { ticker: string }) {
   const stockInfo = stocksDatabase[ticker.toUpperCase()]
