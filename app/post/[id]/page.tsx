@@ -403,7 +403,7 @@ function PostPageContent({ id }: { id: string }) {
           likes_count: comment.likes_count || 0,
           liked: likedCommentIds.has(comment.id),
           replies: [],
-          isExpanded: currentExpandedState.has(comment.id),
+          isExpanded: currentExpandedState.has(comment.id), // Use stored expanded state
           totalReplies: 0
         }));
 
@@ -450,10 +450,18 @@ function PostPageContent({ id }: { id: string }) {
         if (isInitialFetch) {
           setComments(rootComments);
         } else {
-          // Append new comments to existing ones
-          setComments(prev => [...prev, ...rootComments.filter(comment =>
-            !prev.some(existing => existing.id === comment.id)
-          )]);
+          // Append new comments to existing ones, preserving expanded state
+          setComments(prev => {
+            const newComments = [...rootComments.filter(comment =>
+              !prev.some(existing => existing.id === comment.id)
+            )];
+
+            // Preserve expanded state for existing comments
+            return prev.map(existingComment => {
+              const newComment = newComments.find(c => c.id === existingComment.id);
+              return newComment ? { ...newComment, isExpanded: existingComment.isExpanded } : existingComment;
+            }).concat(newComments);
+          });
         }
       }
     } catch (error) {
@@ -723,15 +731,18 @@ function PostPageContent({ id }: { id: string }) {
         // Close reply form
         setActiveReplyTo(null);
 
-        // Automatically expand the parent comment to show the new reply
-        setExpandedComments(prev => {
-          const newSet = new Set(prev);
-          newSet.add(parentCommentId);
-          return newSet;
-        });
+        // Store current expanded state
+        const currentExpandedState = new Set(expandedComments);
 
-        // Refresh all comments
-        await fetchComments();
+        // Automatically expand the parent comment to show the new reply
+        currentExpandedState.add(parentCommentId);
+        setExpandedComments(currentExpandedState);
+
+        // Reset to page 1 to ensure we get fresh data
+        setPage(1);
+
+        // Refresh comments with the stored expanded state
+        await fetchComments(1, true);
 
         // Update counts
         setCommentsCount(prev => prev + 1);
