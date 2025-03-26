@@ -303,8 +303,8 @@ function PostPageContent({ id }: { id: string }) {
   };
 
   const calculateTotalReplies = (comment: CommentData): number => {
-    if (!comment.replies || comment.replies.length === 0) return 0;
-    return comment.replies.reduce((total, reply) => total + 1 + calculateTotalReplies(reply), 0);
+    // Only count direct replies (one level below)
+    return comment.replies?.length || 0;
   };
 
   // Update the fetchComments function
@@ -433,7 +433,8 @@ function PostPageContent({ id }: { id: string }) {
         // Calculate total replies for each comment
         const calculateTotals = (comments: CommentData[]) => {
           comments.forEach(comment => {
-            comment.totalReplies = calculateTotalReplies(comment);
+            // Only count direct replies
+            comment.totalReplies = comment.replies?.length || 0;
             if (comment.replies && comment.replies.length > 0) {
               calculateTotals(comment.replies);
             }
@@ -1056,12 +1057,11 @@ function PostPageContent({ id }: { id: string }) {
 
   return (
     <div className="container px-4 py-6 md:px-6 max-w-3xl mx-auto">
-      <div className="mb-4 flex items-center">
+      <div className="mb-4">
         <Button variant="ghost" size="sm" onClick={() => router.back()} className="mr-2">
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back
         </Button>
-        <h1 className="text-2xl font-bold">Post</h1>
       </div>
 
       <div className="mx-auto">
@@ -1142,47 +1142,44 @@ function PostPageContent({ id }: { id: string }) {
           </CardFooter>
         </Card>
 
-        {/* Add comment form */}
-        {user && (
-          <div className="mb-8 border-b border-gray-700 pb-6">
-            <div className="flex items-start gap-3 mb-3">
-              <Avatar className="h-8 w-8 mt-1">
-                <AvatarImage
-                  src={user.user_metadata?.avatar_url || "/user_icon.svg"}
-                  alt="Your avatar"
-                  onError={(e) => {
-                    console.log(`[PostDetail] Avatar image error for comment form, using fallback`);
-                    e.currentTarget.src = '/user_icon.svg';
-                  }}
-                />
-                <AvatarFallback className="bg-gray-700 text-gray-100">{user.email?.charAt(0).toUpperCase() || '?'}</AvatarFallback>
-              </Avatar>
-              <form onSubmit={handleSubmitComment} className="flex-1">
-                <Textarea
-                  placeholder="Add a comment..."
-                  className="w-full min-h-24 bg-gray-700/30 border border-gray-600 rounded-lg p-3 mb-2 resize-none"
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                />
-                <div className="flex justify-end">
-                  <Button
-                    type="submit"
-                    className="bg-primary hover:bg-primary/90"
-                    disabled={isSubmittingComment || !newComment.trim()}
-                  >
-                    {isSubmittingComment ? "Posting..." : "Post Comment"}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
         {/* Comments section */}
         <div ref={commentSectionRef}>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold">Comments • {commentsCount}</h2>
-          </div>
+          {/* Add comment form - moved to top of comments section */}
+          {user && (
+            <div className="mb-4">
+              <div className="flex items-start gap-3">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage
+                    src={user.user_metadata?.avatar_url || "/user_icon.svg"}
+                    alt="Your avatar"
+                    onError={(e) => {
+                      console.log(`[PostDetail] Avatar image error for comment form, using fallback`);
+                      e.currentTarget.src = '/user_icon.svg';
+                    }}
+                  />
+                  <AvatarFallback className="bg-gray-700 text-gray-100">{user.email?.charAt(0).toUpperCase() || '?'}</AvatarFallback>
+                </Avatar>
+                <form onSubmit={handleSubmitComment} className="flex-1">
+                  <Textarea
+                    placeholder="Add a comment..."
+                    className="w-full min-h-[44px] max-h-32 bg-gray-700/30 border border-gray-600 rounded-lg p-2 resize-none text-sm mb-2"
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="bg-primary hover:bg-primary/90 h-8 px-4"
+                      disabled={isSubmittingComment || !newComment.trim()}
+                    >
+                      {isSubmittingComment ? "..." : "Reply"}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
           {isLoadingComments ? (
             <div className="flex justify-center py-6">
