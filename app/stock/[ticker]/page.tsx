@@ -41,7 +41,7 @@ function StockPageContent({ ticker }: { ticker: string }) {
       user: {
         name: "John Doe",
         username: "johndoe",
-        avatar: "/placeholder.svg?height=40&width=40",
+        avatar: "/user_icon.svg",
         profit: 24.8,
       },
       content: `Just analyzed $${ticker.toUpperCase()} earnings report. Strong growth in services, but hardware sales slightly below expectations. Still bullish long-term.`,
@@ -61,7 +61,7 @@ function StockPageContent({ ticker }: { ticker: string }) {
       user: {
         name: "Sarah Smith",
         username: "sarahsmith",
-        avatar: "/placeholder.svg?height=40&width=40",
+        avatar: "/user_icon.svg",
         profit: 12.3,
       },
       content: `My portfolio is up 12% this quarter! Key winners: $${ticker.toUpperCase()} and others. What are your best performers?`,

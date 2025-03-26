@@ -49,12 +49,12 @@ export default function MobileNavigation() {
               <SheetTrigger asChild>
                 <button className="flex flex-col items-center justify-center rounded-md px-3 py-1 text-muted-foreground hover:text-foreground">
                   <Avatar className="h-6 w-6">
-                    <AvatarImage 
-                      src={user.user_metadata?.avatar_url || "/placeholder.svg"} 
-                      alt={user.user_metadata?.username || "@user"} 
+                    <AvatarImage
+                      src={user.user_metadata?.avatar_url || "/user_icon.svg"}
+                      alt={user.user_metadata?.username || "@user"}
                       onError={(e) => {
                         console.log(`[MobileNav] Avatar image error, using fallback`);
-                        e.currentTarget.src = '/placeholder.svg';
+                        e.currentTarget.src = '/user_icon.svg';
                       }}
                     />
                     <AvatarFallback className="bg-gray-700 text-xs">
@@ -72,12 +72,12 @@ export default function MobileNavigation() {
                       className="flex items-center gap-2 rounded-md py-2 px-3 hover:bg-gray-700 transition-colors"
                     >
                       <Avatar className="h-10 w-10">
-                        <AvatarImage 
-                          src={user.user_metadata?.avatar_url || "/placeholder.svg"} 
-                          alt={user.user_metadata?.username || "@user"} 
+                        <AvatarImage
+                          src={user.user_metadata?.avatar_url || "/user_icon.svg"}
+                          alt={user.user_metadata?.username || "@user"}
                           onError={(e) => {
                             console.log(`[MobileNav] Profile avatar image error, using fallback`);
-                            e.currentTarget.src = '/placeholder.svg';
+                            e.currentTarget.src = '/user_icon.svg';
                           }}
                         />
                         <AvatarFallback className="bg-gray-700">

@@ -55,7 +55,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
       user: {
         name: "Sarah Smith",
         username: "sarahsmith",
-        avatar: "/placeholder.svg?height=40&width=40",
+        avatar: "/user_icon.svg",
       },
       content: "Great analysis! I'm also bullish on $AAPL long-term.",
       time: "1h ago",
@@ -69,7 +69,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
       user: {
         name: "Mark Johnson",
         username: "markjohnson",
-        avatar: "/placeholder.svg?height=40&width=40",
+        avatar: "/user_icon.svg",
       },
       content: "What do you think about their services growth compared to last quarter?",
       time: "45m ago",
@@ -82,7 +82,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
       user: {
         name: "Emily Wilson",
         username: "emilywilson",
-        avatar: "/placeholder.svg?height=40&width=40",
+        avatar: "/user_icon.svg",
       },
       content:
         "#1 I agree with Sarah. The services segment is showing strong momentum. $MSFT is also doing well in this area.",
@@ -98,7 +98,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
       user: {
         name: "John Doe",
         username: "johndoe",
-        avatar: "/placeholder.svg?height=40&width=40",
+        avatar: "/user_icon.svg",
       },
       content:
         "#1 Their ecosystem lock-in is a major advantage. $AAPL has a stronger ecosystem than $GOOG in my opinion.",
@@ -117,7 +117,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
       user: {
         name: "John Doe",
         username: "johndoe",
-        avatar: "/placeholder.svg?height=40&width=40",
+        avatar: "/user_icon.svg",
       },
       content: "#2 Services grew 15% YoY, which is slightly better than Q3.",
       time: "20m ago",
@@ -131,7 +131,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
       user: {
         name: "Alex Turner",
         username: "alexturner",
-        avatar: "/placeholder.svg?height=40&width=40",
+        avatar: "/user_icon.svg",
       },
       content:
         "#4 I agree about $AAPL's ecosystem, but $GOOG has better integration with Android which has a larger global market share.",
@@ -183,7 +183,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
       user: {
         name: "You",
         username: "you",
-        avatar: "/placeholder.svg?height=40&width=40",
+        avatar: "/user_icon.svg",
       },
       content: newComment,
       time: "Just now",
@@ -276,7 +276,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
       <div className="mb-6">
         <div className="flex items-center gap-3 bg-gray-700/30 rounded-full p-1 pl-3">
           <Avatar className="h-8 w-8 border border-gray-600">
-            <AvatarImage src="/placeholder.svg?height=32&width=32" alt="@user" />
+            <AvatarImage src="/user_icon.svg" alt="@user" />
             <AvatarFallback className="bg-gray-600 text-gray-100">U</AvatarFallback>
           </Avatar>
           <Input

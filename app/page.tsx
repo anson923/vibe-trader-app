@@ -65,14 +65,14 @@ export default function FeedPage() {
         if (data) {
           // Check which posts are liked by the current user
           let likedPostIds = new Set<number>();
-          
+
           if (user) {
             // Query the likes table to get posts liked by the current user
             const { data: likedPosts, error: likesError } = await supabase
               .from('likes')
               .select('post_id')
               .eq('user_id', user.id);
-              
+
             if (!likesError && likedPosts) {
               likedPostIds = new Set(likedPosts.map(like => like.post_id));
             }
@@ -84,7 +84,7 @@ export default function FeedPage() {
             user: {
               name: post.username,
               username: post.username.toLowerCase().replace(/\s+/g, ''),
-              avatar: post.avatar_url || "/placeholder.svg?height=40&width=40",
+              avatar: post.avatar_url || "/user_icon.svg",
               profit: 0, // Default value since profit isn't in our posts table
             },
             userId: post.user_id,
@@ -118,13 +118,13 @@ export default function FeedPage() {
         // Try to get stocks from the cached API
         try {
           const response = await fetch('/api/cached-stocks');
-          
+
           if (!response.ok) {
             throw new Error('Failed to fetch from cached stocks API');
           }
-          
+
           const result = await response.json();
-          
+
           if (result.data && Array.isArray(result.data)) {
             // Get top 5 stocks
             const topStocks = result.data.slice(0, 5);

@@ -28,7 +28,7 @@ export default function DashboardPage() {
               <Card>
                 <CardHeader className="flex flex-row items-center gap-4 p-4">
                   <Avatar>
-                    <AvatarImage src="/placeholder.svg?height=40&width=40" alt="@johndoe" />
+                    <AvatarImage src="/user_icon.svg" alt="@johndoe" />
                     <AvatarFallback>JD</AvatarFallback>
                   </Avatar>
                   <div>
@@ -66,7 +66,7 @@ export default function DashboardPage() {
               <Card>
                 <CardHeader className="flex flex-row items-center gap-4 p-4">
                   <Avatar>
-                    <AvatarImage src="/placeholder.svg?height=40&width=40" alt="@sarahsmith" />
+                    <AvatarImage src="/user_icon.svg" alt="@sarahsmith" />
                     <AvatarFallback>SS</AvatarFallback>
                   </Avatar>
                   <div>
@@ -178,7 +178,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Avatar>
-                      <AvatarImage src="/placeholder.svg?height=32&width=32" alt="@markjohnson" />
+                      <AvatarImage src="/user_icon.svg" alt="@markjohnson" />
                       <AvatarFallback>MJ</AvatarFallback>
                     </Avatar>
                     <div>
@@ -193,7 +193,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Avatar>
-                      <AvatarImage src="/placeholder.svg?height=32&width=32" alt="@emilywilson" />
+                      <AvatarImage src="/user_icon.svg" alt="@emilywilson" />
                       <AvatarFallback>EW</AvatarFallback>
                     </Avatar>
                     <div>

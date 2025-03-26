@@ -10,7 +10,7 @@ export default function TrendingPage() {
       user: {
         name: "Sarah Smith",
         username: "sarahsmith",
-        avatar: "/placeholder.svg?height=40&width=40",
+        avatar: "/user_icon.svg",
         profit: 12.3,
       },
       content: "My portfolio is up 12% this quarter! Key winners: $TSLA, $NVDA, $MSFT. What are your best performers?",
@@ -33,7 +33,7 @@ export default function TrendingPage() {
       user: {
         name: "Mark Johnson",
         username: "markjohnson",
-        avatar: "/placeholder.svg?height=40&width=40",
+        avatar: "/user_icon.svg",
         profit: -3.5,
       },
       content:
@@ -56,7 +56,7 @@ export default function TrendingPage() {
       user: {
         name: "Emily Wilson",
         username: "emilywilson",
-        avatar: "/placeholder.svg?height=40&width=40",
+        avatar: "/user_icon.svg",
         profit: 8.7,
       },
       content:

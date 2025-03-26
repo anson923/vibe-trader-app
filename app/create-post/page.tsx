@@ -71,7 +71,7 @@ export default function CreatePostPage() {
         content: content.trim(),
         user_id: user.id,
         username: user.user_metadata?.username || "Anonymous",
-        avatar_url: user.user_metadata?.avatar_url || "/placeholder.svg",
+        avatar_url: user.user_metadata?.avatar_url || "/user_icon.svg",
         tickers: tickers // Set tickers array directly during post creation
       };
 
@@ -92,7 +92,7 @@ export default function CreatePostPage() {
 
         const result = await postResponse.json();
         console.log("Post created successfully using cached API:", result);
-        
+
         // Process stock tickers if present
         const postId = result.data.id;
 
@@ -108,7 +108,7 @@ export default function CreatePostPage() {
         }
       } catch (cacheError) {
         console.warn("Couldn't use cached API, falling back to direct Supabase:", cacheError);
-        
+
         // Fallback to direct Supabase insertion if cached API fails
         const { data, error } = await supabase
           .from('posts')
@@ -159,7 +159,7 @@ export default function CreatePostPage() {
     try {
       // No longer check for stale tickers or attempt to refresh them
       // The server-side background job handles ticker updates every 15 minutes
-      
+
       // Process tickers in batches to improve efficiency while maintaining reliability
       const batchSize = 5; // Process up to 5 tickers at once for better performance
 
@@ -250,12 +250,12 @@ export default function CreatePostPage() {
             <div className="p-4">
               <div className="flex items-center gap-3 mb-4">
                 <Avatar>
-                  <AvatarImage 
-                    src={user?.user_metadata?.avatar_url || "/placeholder.svg"} 
-                    alt="@user" 
+                  <AvatarImage
+                    src={user?.user_metadata?.avatar_url || "/user_icon.svg"}
+                    alt="@user"
                     onError={(e) => {
                       console.log(`[CreatePost] Avatar image error for user, using fallback`);
-                      e.currentTarget.src = '/placeholder.svg';
+                      e.currentTarget.src = '/user_icon.svg';
                     }}
                   />
                   <AvatarFallback>

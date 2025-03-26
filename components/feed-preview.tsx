@@ -10,7 +10,7 @@ export default function FeedPreview() {
       <Card className="border dark:border-gray-800">
         <CardHeader className="flex flex-row items-center gap-4 p-4">
           <Avatar>
-            <AvatarImage src="/placeholder.svg?height=40&width=40" alt="@johndoe" />
+            <AvatarImage src="/user_icon.svg" alt="@johndoe" />
             <AvatarFallback>JD</AvatarFallback>
           </Avatar>
           <div>
@@ -48,7 +48,7 @@ export default function FeedPreview() {
       <Card className="border dark:border-gray-800">
         <CardHeader className="flex flex-row items-center gap-4 p-4">
           <Avatar>
-            <AvatarImage src="/placeholder.svg?height=40&width=40" alt="@sarahsmith" />
+            <AvatarImage src="/user_icon.svg" alt="@sarahsmith" />
             <AvatarFallback>SS</AvatarFallback>
           </Avatar>
           <div>

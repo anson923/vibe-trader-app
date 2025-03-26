@@ -11,12 +11,12 @@ const samplePosts = [
     author: {
       name: "Professor Smith",
       username: "prof_smith",
-      avatar: "/placeholder.svg?height=40&width=40",
+      avatar: "/user_icon.svg",
     },
     content:
       "Just posted the lecture notes for today's class on quantum mechanics. Make sure to review them before the next session! #physics #quantummechanics",
     timestamp: "2h ago",
-    image: "/placeholder.svg?height=300&width=500",
+    image: "/user_icon.svg",
     likes: 42,
     comments: 8,
     shares: 3,
@@ -27,7 +27,7 @@ const samplePosts = [
     author: {
       name: "Student Council",
       username: "student_council",
-      avatar: "/placeholder.svg?height=40&width=40",
+      avatar: "/user_icon.svg",
     },
     content:
       "Reminder: The spring festival is next week! Join us for food, music, and fun activities across campus. Don't forget to register for the talent show by Friday. #springfestival #campuslife",
@@ -42,12 +42,12 @@ const samplePosts = [
     author: {
       name: "University Library",
       username: "uni_library",
-      avatar: "/placeholder.svg?height=40&width=40",
+      avatar: "/user_icon.svg",
     },
     content:
       "Extended hours start today! The library will be open until 2 AM for the final exam period. Study rooms can be reserved online. Coffee and snacks available at the café. #finals #studyhard",
     timestamp: "6h ago",
-    image: "/placeholder.svg?height=300&width=500",
+    image: "/user_icon.svg",
     likes: 76,
     comments: 12,
     shares: 8,
@@ -58,7 +58,7 @@ const samplePosts = [
     author: {
       name: "Dr. Johnson",
       username: "dr_johnson",
-      avatar: "/placeholder.svg?height=40&width=40",
+      avatar: "/user_icon.svg",
     },
     content:
       "Excited to announce that our research team has received a $2M grant for our work on sustainable energy solutions! Looking for graduate students interested in joining the project. #research #sustainability",
@@ -73,12 +73,12 @@ const samplePosts = [
     author: {
       name: "Campus Athletics",
       username: "campus_athletics",
-      avatar: "/placeholder.svg?height=40&width=40",
+      avatar: "/user_icon.svg",
     },
     content:
       "Big win for our basketball team last night! Congratulations to all players and coaches. Next game is Saturday at 7 PM. Come support your university team! #goteam #victory",
     timestamp: "1d ago",
-    image: "/placeholder.svg?height=300&width=500",
+    image: "/user_icon.svg",
     likes: 342,
     comments: 56,
     shares: 89,
@@ -89,7 +89,7 @@ const samplePosts = [
     author: {
       name: "Career Center",
       username: "career_center",
-      avatar: "/placeholder.svg?height=40&width=40",
+      avatar: "/user_icon.svg",
     },
     content:
       "The annual job fair is coming up next month! Over 50 companies will be on campus recruiting for internships and full-time positions. Update your resume and prepare your elevator pitch! #careers #jobfair",
@@ -104,12 +104,12 @@ const samplePosts = [
     author: {
       name: "Computer Science Dept",
       username: "cs_department",
-      avatar: "/placeholder.svg?height=40&width=40",
+      avatar: "/user_icon.svg",
     },
     content:
       "Congratulations to our programming team for winning the regional hackathon! Their project on AI-assisted accessibility tools impressed all the judges. #computerscience #hackathon",
     timestamp: "2d ago",
-    image: "/placeholder.svg?height=300&width=500",
+    image: "/user_icon.svg",
     likes: 187,
     comments: 28,
     shares: 52,

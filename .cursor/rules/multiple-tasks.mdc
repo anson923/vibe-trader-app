@@ -1,9 +1,9 @@
 ---
-description: When you have a complex request
+description: 
 globs: 
-alwaysApply: false
+alwaysApply: true
 ---
 
 # Your rule content
 
-When you have a complex request, make sure to use sequentialthinking mcp tool to break down for easier steps and instruction.
+Always use sequentialthinking mcp tool to break down steps for easier documentation of instruction and implementation.

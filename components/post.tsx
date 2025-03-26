@@ -83,7 +83,7 @@ export default function Post({ post }: PostProps) {
         {post.image && (
           <div className="overflow-hidden rounded-lg">
             <img
-              src={post.image || "/placeholder.svg"}
+              src={post.image || "/user_icon.svg"}
               alt="Post attachment"
               className="h-auto w-full object-cover transition-all hover:scale-105"
             />

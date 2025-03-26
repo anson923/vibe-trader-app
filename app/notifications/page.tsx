@@ -37,7 +37,7 @@ export default function NotificationsPage() {
                     {
                       type: "comment",
                       user: "Sarah Smith",
-                      avatar: "/placeholder.svg?height=40&width=40",
+                      avatar: "/user_icon.svg",
                       action: "commented on your post",
                       time: "2 hours ago",
                       icon: MessageSquare,
@@ -45,7 +45,7 @@ export default function NotificationsPage() {
                     {
                       type: "like",
                       user: "John Doe",
-                      avatar: "/placeholder.svg?height=40&width=40",
+                      avatar: "/user_icon.svg",
                       action: "liked your post",
                       time: "3 hours ago",
                       icon: Heart,
@@ -53,7 +53,7 @@ export default function NotificationsPage() {
                     {
                       type: "follow",
                       user: "Emily Wilson",
-                      avatar: "/placeholder.svg?height=40&width=40",
+                      avatar: "/user_icon.svg",
                       action: "started following you",
                       time: "5 hours ago",
                       icon: UserPlus,
@@ -61,7 +61,7 @@ export default function NotificationsPage() {
                     {
                       type: "bookmark",
                       user: "Mark Johnson",
-                      avatar: "/placeholder.svg?height=40&width=40",
+                      avatar: "/user_icon.svg",
                       action: "bookmarked your analysis post",
                       time: "6 hours ago",
                       icon: Bookmark,
@@ -69,7 +69,7 @@ export default function NotificationsPage() {
                   ].map((notification, i) => (
                     <div key={i} className="flex items-start gap-4 p-4 hover:bg-gray-700/50">
                       <Avatar>
-                        <AvatarImage src={notification.avatar} alt={notification.user} />
+                        <AvatarImage src="/user_icon.svg" alt={notification.user} />
                         <AvatarFallback>{notification.user.charAt(0)}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1 space-y-1">
@@ -96,7 +96,7 @@ export default function NotificationsPage() {
                     {
                       type: "market",
                       user: "Market Alert",
-                      avatar: "/placeholder.svg?height=40&width=40",
+                      avatar: "/user_icon.svg",
                       action: "AAPL reached your price target of $200",
                       time: "1 day ago",
                       icon: BarChart2,
@@ -104,7 +104,7 @@ export default function NotificationsPage() {
                     {
                       type: "mention",
                       user: "Mark Johnson",
-                      avatar: "/placeholder.svg?height=40&width=40",
+                      avatar: "/user_icon.svg",
                       action: "mentioned you in a comment",
                       time: "1 day ago",
                       icon: Bell,
@@ -112,7 +112,7 @@ export default function NotificationsPage() {
                   ].map((notification, i) => (
                     <div key={i} className="flex items-start gap-4 p-4 hover:bg-gray-700/50">
                       <Avatar>
-                        <AvatarImage src={notification.avatar} alt={notification.user} />
+                        <AvatarImage src="/user_icon.svg" alt={notification.user} />
                         <AvatarFallback>{notification.user.charAt(0)}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1 space-y-1">
@@ -135,7 +135,7 @@ export default function NotificationsPage() {
               <CardContent className="p-4">
                 <div className="flex items-start gap-4">
                   <Avatar>
-                    <AvatarImage src="/placeholder.svg?height=40&width=40" alt="Mark Johnson" />
+                    <AvatarImage src="/user_icon.svg" alt="Mark Johnson" />
                     <AvatarFallback>MJ</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 space-y-1">
@@ -159,7 +159,7 @@ export default function NotificationsPage() {
                     {
                       type: "comment",
                       user: "Sarah Smith",
-                      avatar: "/placeholder.svg?height=40&width=40",
+                      avatar: "/user_icon.svg",
                       action: "commented on your post",
                       time: "2 hours ago",
                       icon: MessageSquare,
@@ -167,7 +167,7 @@ export default function NotificationsPage() {
                     {
                       type: "like",
                       user: "John Doe",
-                      avatar: "/placeholder.svg?height=40&width=40",
+                      avatar: "/user_icon.svg",
                       action: "liked your post",
                       time: "3 hours ago",
                       icon: Heart,
@@ -175,7 +175,7 @@ export default function NotificationsPage() {
                     {
                       type: "bookmark",
                       user: "Mark Johnson",
-                      avatar: "/placeholder.svg?height=40&width=40",
+                      avatar: "/user_icon.svg",
                       action: "bookmarked your analysis post",
                       time: "6 hours ago",
                       icon: Bookmark,
@@ -183,7 +183,7 @@ export default function NotificationsPage() {
                   ].map((notification, i) => (
                     <div key={i} className="flex items-start gap-4 p-4 hover:bg-gray-700/50">
                       <Avatar>
-                        <AvatarImage src={notification.avatar} alt={notification.user} />
+                        <AvatarImage src="/user_icon.svg" alt={notification.user} />
                         <AvatarFallback>{notification.user.charAt(0)}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1 space-y-1">
@@ -206,7 +206,7 @@ export default function NotificationsPage() {
               <CardContent className="p-4">
                 <div className="flex items-start gap-4">
                   <Avatar>
-                    <AvatarImage src="/placeholder.svg?height=40&width=40" alt="Market Alert" />
+                    <AvatarImage src="/user_icon.svg" alt="Market Alert" />
                     <AvatarFallback>MA</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 space-y-1">

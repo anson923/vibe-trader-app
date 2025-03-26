@@ -8,7 +8,7 @@ export default function BookmarksPage() {
       user: {
         name: "John Doe",
         username: "johndoe",
-        avatar: "/placeholder.svg?height=40&width=40",
+        avatar: "/user_icon.svg",
         profit: 24.8,
       },
       content:
@@ -29,7 +29,7 @@ export default function BookmarksPage() {
       user: {
         name: "Sarah Smith",
         username: "sarahsmith",
-        avatar: "/placeholder.svg?height=40&width=40",
+        avatar: "/user_icon.svg",
         profit: 12.3,
       },
       content: "My portfolio is up 12% this quarter! Key winners: $TSLA, $NVDA, $MSFT. What are your best performers?",

@@ -77,7 +77,7 @@ export default function ProfilePage() {
             user: {
               name: post.username,
               username: post.username.toLowerCase().replace(/\s+/g, ''),
-              avatar: post.avatar_url || "/placeholder.svg?height=40&width=40",
+              avatar: post.avatar_url || "/user_icon.svg",
               profit: 0, // Default value since profit isn't in our posts table
             },
             content: post.content,
@@ -146,7 +146,7 @@ export default function ProfilePage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
             <div className="flex flex-col md:flex-row md:items-center md:space-x-4">
               <Avatar className="h-24 w-24 mb-4 md:mb-0">
-                <AvatarImage src="/placeholder.svg?height=96&width=96" alt={user?.user_metadata?.username || "User"} />
+                <AvatarImage src="/user_icon.svg" alt={user?.user_metadata?.username || "User"} />
                 <AvatarFallback className="text-2xl">
                   {user?.user_metadata?.username ? user.user_metadata.username.substring(0, 2).toUpperCase() : "U"}
                 </AvatarFallback>

@@ -165,14 +165,14 @@ export default function PostCard({
     }
 
     setIsSubmitting(true)
-    
+
     // Store original state to restore on error
     const originalLiked = liked
     const originalLikesCount = likesCount
-    
+
     console.log(`[PostCard] Post ID ${id} - Optimistically updating UI - New like status:`, !liked);
     console.log(`[PostCard] Post ID ${id} - Optimistically updating count from ${likesCount} to`, liked ? likesCount - 1 : likesCount + 1);
-    
+
     // Optimistically update UI
     setLiked(!liked)
     setLikesCount(prev => !liked ? prev + 1 : Math.max(0, prev - 1))
@@ -191,7 +191,7 @@ export default function PostCard({
           console.error(`[PostCard] Post ID ${id} - Error unliking post:`, unlikeError);
           throw unlikeError
         }
-        
+
         // Update the post's likes count
         console.log(`[PostCard] Post ID ${id} - Updating post likes_count in posts table after unlike`);
         const { error: updateError } = await supabase
@@ -257,13 +257,13 @@ export default function PostCard({
     >
       <CardHeader className="flex flex-row items-center gap-4 p-4">
         <Avatar>
-          <AvatarImage 
-            src={user.avatar.startsWith('/') ? user.avatar : `/avatars/${user.avatar}`} 
-            alt={`@${user.username}`} 
+          <AvatarImage
+            src={user.avatar.startsWith('/') ? user.avatar : `/avatars/${user.avatar}`}
+            alt={`@${user.username}`}
             onError={(e) => {
               // If the image fails to load, set the source to our placeholder
               console.log(`[PostCard] Avatar image error for ${user.username}, using fallback`);
-              e.currentTarget.src = '/placeholder.svg';
+              e.currentTarget.src = '/user_icon.svg';
             }}
           />
           <AvatarFallback className="bg-gray-700">{user.name.charAt(0)}</AvatarFallback>
@@ -282,7 +282,7 @@ export default function PostCard({
             @{user.username} • {time}
           </p>
         </div>
-        
+
         <DeletePostButton
           postId={id}
           userId={userId || ""}
