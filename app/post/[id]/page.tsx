@@ -192,7 +192,7 @@ function PostPageContent({ id }: { id: string }) {
   console.log(`[PostDetail] Rendering PostDetail for Post ID ${id}`);
 
   const router = useRouter()
-  const { user, getAccessToken, getAuthTokens } = useAuth()
+  const { user, isLoading: isAuthLoading } = useAuth()
   const [post, setPost] = useState<PostData | null>(null)
   const [comments, setComments] = useState<CommentData[]>([])
   const [newComment, setNewComment] = useState("")
@@ -232,8 +232,10 @@ function PostPageContent({ id }: { id: string }) {
     });
   };
 
-  // Fetch post data and comments
+  // Fetch post data and comments only after auth is ready
   useEffect(() => {
+    if (isAuthLoading) return; // Wait for auth to be ready
+
     async function fetchPostData() {
       try {
         console.log(`[PostDetail] Fetching post data for Post ID ${postId}`);
@@ -269,7 +271,41 @@ function PostPageContent({ id }: { id: string }) {
     }
 
     fetchPostData()
-  }, [postId, router])
+  }, [postId, router, isAuthLoading])
+
+  // Check if user has liked the post - only run after auth is ready
+  useEffect(() => {
+    async function checkIfLiked() {
+      if (isAuthLoading) return; // Wait for auth to be ready
+
+      if (!user) {
+        console.log(`[PostDetail] Skipping like check for Post ID ${postId} - User not logged in`);
+        setLiked(false);
+        return;
+      }
+
+      try {
+        console.log(`[PostDetail] Checking like status for Post ID ${postId}`);
+        const { data, error } = await supabase
+          .from('likes')
+          .select('id')
+          .eq('post_id', postId)
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (error) {
+          throw error
+        }
+
+        console.log(`[PostDetail] Like status retrieved for Post ID ${postId} - Liked:`, !!data);
+        setLiked(!!data)
+      } catch (error) {
+        console.error(`[PostDetail] Error checking like status for Post ID ${postId}:`, error)
+      }
+    }
+
+    checkIfLiked()
+  }, [postId, user, isAuthLoading])
 
   // Implement infinite scrolling
   useEffect(() => {
@@ -382,10 +418,12 @@ function PostPageContent({ id }: { id: string }) {
           const { data: likedComments, error: likesError } = await supabase
             .from('comment_likes')
             .select('comment_id')
-            .eq('user_id', user.id);
+            .eq('user_id', user.id)
+            .in('comment_id', [...(commentsData || []), ...(repliesData || [])].map(c => c.id));
 
           if (!likesError && likedComments) {
             likedCommentIds = new Set(likedComments.map(like => like.comment_id));
+            console.log(`[PostDetail] Retrieved liked comments for user:`, likedCommentIds);
           }
         }
 
@@ -403,7 +441,7 @@ function PostPageContent({ id }: { id: string }) {
           likes_count: comment.likes_count || 0,
           liked: likedCommentIds.has(comment.id),
           replies: [],
-          isExpanded: currentExpandedState.has(comment.id), // Use stored expanded state
+          isExpanded: currentExpandedState.has(comment.id),
           totalReplies: 0
         }));
 
@@ -512,37 +550,6 @@ function PostPageContent({ id }: { id: string }) {
     }
   }, [postId]);
 
-  // Check if user has liked the post
-  useEffect(() => {
-    async function checkIfLiked() {
-      if (!user || !postId) {
-        console.log(`[PostDetail] Skipping like check for Post ID ${postId} - User:`, user ? 'logged in' : 'not logged in');
-        return;
-      }
-
-      try {
-        console.log(`[PostDetail] Checking like status for Post ID ${postId}`);
-        const { data, error } = await supabase
-          .from('likes')
-          .select('id')
-          .eq('post_id', postId)
-          .eq('user_id', user.id)
-          .maybeSingle()
-
-        if (error) {
-          throw error
-        }
-
-        console.log(`[PostDetail] Like status retrieved for Post ID ${postId} - Liked:`, !!data);
-        setLiked(!!data)
-      } catch (error) {
-        console.error(`[PostDetail] Error checking like status for Post ID ${postId}:`, error)
-      }
-    }
-
-    checkIfLiked()
-  }, [postId, user])
-
   const handleLike = async () => {
     console.log(`[PostDetail] Post ID ${postId} - Current like status:`, liked);
     console.log(`[PostDetail] Post ID ${postId} - Current likes count:`, likesCount);
@@ -574,19 +581,20 @@ function PostPageContent({ id }: { id: string }) {
     try {
       if (originalLiked) {
         console.log(`[PostDetail] Post ID ${postId} - Attempting to unlike post in Supabase`);
-        // Unlike the post
-        const { error } = await supabase
-          .from('likes')
-          .delete()
-          .eq('post_id', postId)
-          .eq('user_id', user.id)
 
-        if (error) {
-          console.error(`[PostDetail] Post ID ${postId} - Error unliking post:`, error);
-          throw error
+        // Start a Supabase transaction by using RPC
+        const { data: rpcData, error: rpcError } = await supabase.rpc('unlike_post', {
+          p_post_id: postId,
+          p_user_id: user.id
+        });
+
+        if (rpcError) {
+          console.error(`[PostDetail] Post ID ${postId} - Error unliking post:`, rpcError);
+          throw rpcError;
         }
 
         console.log(`[PostDetail] Post ID ${postId} - Successfully unliked post in Supabase`);
+
         // Update the post object to keep it in sync
         if (post) {
           console.log(`[PostDetail] Post ID ${postId} - Updating post object likes count from ${post.likes_count} to ${Math.max(0, post.likes_count - 1)}`);
@@ -597,20 +605,20 @@ function PostPageContent({ id }: { id: string }) {
         }
       } else {
         console.log(`[PostDetail] Post ID ${postId} - Attempting to like post in Supabase`);
-        // Like the post
-        const { error } = await supabase
-          .from('likes')
-          .insert({
-            post_id: postId,
-            user_id: user.id
-          })
 
-        if (error) {
-          console.error(`[PostDetail] Post ID ${postId} - Error liking post:`, error);
-          throw error
+        // Start a Supabase transaction by using RPC
+        const { data: rpcData, error: rpcError } = await supabase.rpc('like_post', {
+          p_post_id: postId,
+          p_user_id: user.id
+        });
+
+        if (rpcError) {
+          console.error(`[PostDetail] Post ID ${postId} - Error liking post:`, rpcError);
+          throw rpcError;
         }
 
         console.log(`[PostDetail] Post ID ${postId} - Successfully liked post in Supabase`);
+
         // Update the post object to keep it in sync
         if (post) {
           console.log(`[PostDetail] Post ID ${postId} - Updating post object likes count from ${post.likes_count} to ${post.likes_count + 1}`);
