@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { Heart, MessageSquare, Share2, Bookmark, Repeat2, ArrowLeft } from "lucide-react"
+import { Heart, MessageSquare, Share2, Bookmark, Repeat2, ArrowLeft, ChevronDown, Users } from "lucide-react"
 import { useAuth } from "@/lib/context/auth-context"
 import { supabase } from "@/lib/supabase"
 import { StockBadge } from "@/components/stock-badge"
@@ -37,6 +37,8 @@ interface CommentData {
   likes_count: number
   liked?: boolean
   replies?: CommentData[]
+  isExpanded?: boolean
+  totalReplies?: number
 }
 
 // Define type for the stock data returned from getStockDataForPost
@@ -64,13 +66,13 @@ type PageProps = {
 }
 
 // Add this new component before the PostPageContent component
-const ReplyForm = ({ 
-  user, 
-  commentUsername, 
-  onSubmit, 
-  onCancel, 
-  isSubmitting 
-}: { 
+const ReplyForm = ({
+  user,
+  commentUsername,
+  onSubmit,
+  onCancel,
+  isSubmitting
+}: {
   user: any;
   commentUsername: string;
   onSubmit: (content: string) => void;
@@ -85,9 +87,9 @@ const ReplyForm = ({
         <div className="flex items-center gap-3 mb-2">
           <div className="mr-2 flex items-start pt-1.5">
             <Avatar className="h-8 w-8">
-              <AvatarImage 
-                src={user.user_metadata?.avatar_url || "/placeholder.svg"} 
-                alt="Your avatar" 
+              <AvatarImage
+                src={user.user_metadata?.avatar_url || "/placeholder.svg"}
+                alt="Your avatar"
                 onError={(e) => {
                   console.log(`[PostDetail] Avatar image error for current user, using fallback`);
                   e.currentTarget.src = '/placeholder.svg';
@@ -105,21 +107,43 @@ const ReplyForm = ({
         />
       </div>
       <div className="flex justify-end gap-2">
-        <Button 
-          size="sm" 
-          variant="outline" 
+        <Button
+          size="sm"
+          variant="outline"
           onClick={onCancel}
         >
           Cancel
         </Button>
-        <Button 
-          size="sm" 
+        <Button
+          size="sm"
           disabled={isSubmitting || !replyContent.trim()}
           onClick={() => onSubmit(replyContent)}
         >
           {isSubmitting ? "Replying..." : "Reply"}
         </Button>
       </div>
+    </div>
+  );
+};
+
+// Add the CommentPreview component
+const CommentPreview = ({ replies }: { replies: CommentData[] }) => {
+  const previewCount = Math.min(3, replies.length);
+
+  return (
+    <div className="flex items-center gap-2 mt-2 px-4 py-2 bg-gray-800/50 rounded-md">
+      <div className="flex -space-x-2">
+        {replies.slice(0, previewCount).map((reply, index) => (
+          <Avatar key={reply.id} className="h-6 w-6 border-2 border-gray-800">
+            <AvatarImage src={reply.avatar_url} alt={`@${reply.username}`} />
+            <AvatarFallback>{reply.username.charAt(0).toUpperCase()}</AvatarFallback>
+          </Avatar>
+        ))}
+      </div>
+      <span className="text-sm text-gray-400">
+        <Users className="h-4 w-4 inline mr-1" />
+        {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
+      </span>
     </div>
   );
 };
@@ -186,12 +210,17 @@ function PostPageContent({ id }: { id: string }) {
     fetchPostData()
   }, [postId, router])
 
-  // Separate function to fetch comments directly from Supabase
+  const calculateTotalReplies = (comment: CommentData): number => {
+    if (!comment.replies || comment.replies.length === 0) return 0;
+    return comment.replies.reduce((total, reply) => total + 1 + calculateTotalReplies(reply), 0);
+  };
+
+  // Update the fetchComments function
   const fetchComments = async () => {
     if (!postId) return;
 
     setIsLoadingComments(true);
-    
+
     try {
       // Direct query to Supabase
       const { data: commentsData, error: commentsError } = await supabase
@@ -218,19 +247,19 @@ function PostPageContent({ id }: { id: string }) {
       if (commentsData) {
         // Map to track liked comments if user is authenticated
         let likedCommentIds = new Set<number>();
-        
+
         if (user) {
           // Check which comments the user has liked
           const { data: likedComments, error: likesError } = await supabase
             .from('comment_likes')
             .select('comment_id')
             .eq('user_id', user.id);
-            
+
           if (!likesError && likedComments) {
             likedCommentIds = new Set(likedComments.map(like => like.comment_id));
           }
         }
-        
+
         // Map comments directly without nested profiles handling
         const processedComments = commentsData.map(comment => ({
           id: comment.id,
@@ -244,18 +273,20 @@ function PostPageContent({ id }: { id: string }) {
           level: comment.level || 0,
           likes_count: comment.likes_count || 0,
           liked: likedCommentIds.has(comment.id),
-          replies: []
+          replies: [],
+          isExpanded: false,
+          totalReplies: 0
         }));
-        
+
         // Transform flat comments into a tree structure
         const rootComments: CommentData[] = [];
         const commentMap = new Map<number, CommentData>();
-        
+
         // First, create a map of all comments
         processedComments.forEach(comment => {
           commentMap.set(comment.id, comment);
         });
-        
+
         // Then, build the tree structure
         processedComments.forEach(comment => {
           if (comment.parent_comment_id) {
@@ -273,26 +304,38 @@ function PostPageContent({ id }: { id: string }) {
             rootComments.push(comment);
           }
         });
-        
+
+        // Calculate total replies for each comment
+        const calculateTotals = (comments: CommentData[]) => {
+          comments.forEach(comment => {
+            comment.totalReplies = calculateTotalReplies(comment);
+            if (comment.replies && comment.replies.length > 0) {
+              calculateTotals(comment.replies);
+            }
+          });
+        };
+
+        calculateTotals(rootComments);
+
         // Sort root comments by created_at (newest first)
-        rootComments.sort((a, b) => 
+        rootComments.sort((a, b) =>
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
-        
+
         // Sort replies by created_at (oldest first)
         const sortReplies = (comments: CommentData[]) => {
           comments.forEach(comment => {
             if (comment.replies && comment.replies.length > 0) {
-              comment.replies.sort((a, b) => 
+              comment.replies.sort((a, b) =>
                 new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
               );
               sortReplies(comment.replies);
             }
           });
         };
-        
+
         sortReplies(rootComments);
-        
+
         setComments(rootComments);
       }
     } catch (error) {
@@ -386,14 +429,14 @@ function PostPageContent({ id }: { id: string }) {
     }
 
     setIsSubmittingLike(true)
-    
+
     // Store original state to restore on error
     const originalLiked = liked
     const originalLikesCount = likesCount
-    
+
     console.log(`[PostDetail] Post ID ${postId} - Optimistically updating UI - New like status:`, !liked);
     console.log(`[PostDetail] Post ID ${postId} - Optimistically updating count from ${likesCount} to`, liked ? likesCount - 1 : likesCount + 1);
-    
+
     // Optimistically update UI
     setLiked(!liked)
     setLikesCount(prev => !liked ? prev + 1 : Math.max(0, prev - 1))
@@ -412,7 +455,7 @@ function PostPageContent({ id }: { id: string }) {
           console.error(`[PostDetail] Post ID ${postId} - Error unliking post:`, error);
           throw error
         }
-        
+
         console.log(`[PostDetail] Post ID ${postId} - Successfully unliked post in Supabase`);
         // Update the post object to keep it in sync
         if (post) {
@@ -436,7 +479,7 @@ function PostPageContent({ id }: { id: string }) {
           console.error(`[PostDetail] Post ID ${postId} - Error liking post:`, error);
           throw error
         }
-        
+
         console.log(`[PostDetail] Post ID ${postId} - Successfully liked post in Supabase`);
         // Update the post object to keep it in sync
         if (post) {
@@ -497,13 +540,13 @@ function PostPageContent({ id }: { id: string }) {
       if (data && data[0]) {
         // Clear comment input
         setNewComment("");
-        
+
         // Refresh all comments
         await fetchComments();
-        
+
         // Update counts
         setCommentsCount(prev => prev + 1);
-        
+
         // Also update the likes count in the post
         try {
           await supabase
@@ -558,13 +601,13 @@ function PostPageContent({ id }: { id: string }) {
       if (data && data[0]) {
         // Close reply form
         setActiveReplyTo(null);
-        
+
         // Refresh all comments
         await fetchComments();
-        
+
         // Update counts
         setCommentsCount(prev => prev + 1);
-        
+
         try {
           await supabase
             .from('posts')
@@ -591,7 +634,7 @@ function PostPageContent({ id }: { id: string }) {
     if (isSubmittingCommentLike) return
 
     setIsSubmittingCommentLike(true)
-    
+
     // Optimistically update UI first
     setComments(prevComments => {
       // Helper function to update comment in a nested structure
@@ -614,7 +657,7 @@ function PostPageContent({ id }: { id: string }) {
           return comment;
         });
       };
-      
+
       return updateCommentInTree(prevComments);
     });
 
@@ -680,39 +723,44 @@ function PostPageContent({ id }: { id: string }) {
   const CommentItem = ({ comment, level = 0 }: { comment: CommentData, level?: number }) => {
     const isReplyActive = activeReplyTo === comment.id;
     const hasReplies = comment.replies && comment.replies.length > 0;
-    
+    const [isExpanded, setIsExpanded] = useState(false);
+
     const handleReplySubmit = (content: string) => {
       handleSubmitReply(comment.id, comment.level || 0, content);
     };
-    
+
+    const toggleExpanded = () => {
+      setIsExpanded(!isExpanded);
+    };
+
     return (
-      <div className="comment-thread">
-        <Card key={comment.id} className="border-gray-700 bg-gray-800">
-          <CardHeader className="flex flex-row items-center gap-3 p-4">
-            <div className="mr-4">
-              <Avatar>
-                <AvatarImage 
-                  src={comment.avatar_url || "/placeholder.svg"} 
-                  alt={`@${comment.username}`} 
-                  onError={(e) => {
-                    console.log(`[PostDetail] Avatar image error for comment author ${comment.username}, using fallback`);
-                    e.currentTarget.src = '/placeholder.svg';
-                  }}
-                />
-                <AvatarFallback>{comment.username.charAt(0).toUpperCase()}</AvatarFallback>
-              </Avatar>
-            </div>
-            <div className="flex-1">
-              <p className="font-medium">{comment.username}</p>
-              <p className="text-xs text-gray-400">
-                @{comment.username.toLowerCase().replace(/\s+/g, '')} • {formatDate(comment.created_at)}
-              </p>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <p>{comment.content}</p>
-          </CardContent>
-          <CardFooter className="flex justify-start gap-4 p-3 pt-1 border-t border-gray-700">
+      <Card className="border-gray-700 bg-gray-800/80 overflow-hidden">
+        <CardHeader className="flex flex-row items-center gap-3 p-4">
+          <div className="mr-4">
+            <Avatar>
+              <AvatarImage
+                src={comment.avatar_url || "/placeholder.svg"}
+                alt={`@${comment.username}`}
+                onError={(e) => {
+                  console.log(`[PostDetail] Avatar image error for comment author ${comment.username}, using fallback`);
+                  e.currentTarget.src = '/placeholder.svg';
+                }}
+              />
+              <AvatarFallback>{comment.username.charAt(0).toUpperCase()}</AvatarFallback>
+            </Avatar>
+          </div>
+          <div className="flex-1">
+            <p className="font-medium">{comment.username}</p>
+            <p className="text-xs text-gray-400">
+              @{comment.username.toLowerCase().replace(/\s+/g, '')} • {formatDate(comment.created_at)}
+            </p>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 pt-0">
+          <p>{comment.content}</p>
+        </CardContent>
+        <CardFooter className="flex justify-between p-3 pt-1 border-t border-gray-700">
+          <div className="flex gap-4">
             <Button
               variant="ghost"
               size="sm"
@@ -723,7 +771,7 @@ function PostPageContent({ id }: { id: string }) {
               <Heart className={`h-4 w-4 ${comment.liked ? 'fill-current' : ''}`} />
               <span>{comment.likes_count}</span>
             </Button>
-            
+
             <Button
               variant="ghost"
               size="sm"
@@ -739,10 +787,24 @@ function PostPageContent({ id }: { id: string }) {
               <MessageSquare className="h-4 w-4" />
               <span>Reply</span>
             </Button>
-          </CardFooter>
-          
-          {/* Reply form */}
-          {isReplyActive && user && (
+          </div>
+
+          {hasReplies && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1"
+              onClick={toggleExpanded}
+            >
+              <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+              <span>{comment.replies?.length} {comment.replies?.length === 1 ? 'reply' : 'replies'}</span>
+            </Button>
+          )}
+        </CardFooter>
+
+        {/* Reply form */}
+        {isReplyActive && user && (
+          <div className="border-t border-gray-700">
             <ReplyForm
               user={user}
               commentUsername={comment.username}
@@ -750,18 +812,26 @@ function PostPageContent({ id }: { id: string }) {
               onCancel={() => setActiveReplyTo(null)}
               isSubmitting={isSubmittingComment}
             />
-          )}
-        </Card>
-        
-        {/* Render replies */}
-        {hasReplies && (
-          <div className="ml-6 mt-2 space-y-3 border-l-2 border-gray-700 pl-4">
-            {comment.replies?.map(reply => (
-              <CommentItem key={reply.id} comment={reply} level={(level || 0) + 1} />
-            ))}
           </div>
         )}
-      </div>
+
+        {/* Nested replies */}
+        {hasReplies && (
+          <div className="border-t border-gray-700">
+            {!isExpanded ? (
+              <CommentPreview replies={comment.replies!} />
+            ) : (
+              <div className="bg-gray-800/30 py-2">
+                {comment.replies?.map(reply => (
+                  <div key={reply.id} className="px-4 mb-2 last:mb-0">
+                    <CommentItem comment={reply} level={level + 1} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
     );
   };
 
@@ -799,9 +869,9 @@ function PostPageContent({ id }: { id: string }) {
         <Card className="border-gray-700 bg-gray-800 mb-6">
           <CardHeader className="flex flex-row items-center gap-4 p-4">
             <Avatar>
-              <AvatarImage 
-                src={post.avatar_url || "/placeholder.svg"} 
-                alt={`@${post.username}`} 
+              <AvatarImage
+                src={post.avatar_url || "/placeholder.svg"}
+                alt={`@${post.username}`}
                 onError={(e) => {
                   console.log(`[PostDetail] Avatar image error for post author ${post.username}, using fallback`);
                   e.currentTarget.src = '/placeholder.svg';
@@ -824,7 +894,7 @@ function PostPageContent({ id }: { id: string }) {
           </CardHeader>
           <CardContent className="p-4 pt-0">
             <p className="mb-3 text-lg">{post.content}</p>
-            
+
             {/* Stock badges */}
             {stockData.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2 mb-3">
@@ -880,9 +950,9 @@ function PostPageContent({ id }: { id: string }) {
                 <div className="flex items-center gap-3">
                   <div className="mr-2 flex items-start pt-1.5">
                     <Avatar className="h-8 w-8">
-                      <AvatarImage 
-                        src={user.user_metadata?.avatar_url || "/placeholder.svg"} 
-                        alt="Your avatar" 
+                      <AvatarImage
+                        src={user.user_metadata?.avatar_url || "/placeholder.svg"}
+                        alt="Your avatar"
                         onError={(e) => {
                           console.log(`[PostDetail] Avatar image error for comment form, using fallback`);
                           e.currentTarget.src = '/placeholder.svg';
@@ -909,30 +979,32 @@ function PostPageContent({ id }: { id: string }) {
         )}
 
         {/* Comments section */}
-        <h2 className="text-lg font-semibold mb-4">Comments ({commentsCount})</h2>
-        {comments.length > 0 ? (
-          <div className="space-y-4">
-            {comments.map((comment) => (
-              <CommentItem key={comment.id} comment={comment} />
-            ))}
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Comments ({commentsCount})</h2>
           </div>
-        ) : (
-          <Card className="border-gray-700 bg-gray-800">
-            <CardContent className="p-4">
-              <p className="text-center text-gray-400">No comments yet. Be the first to comment!</p>
-            </CardContent>
-          </Card>
-        )}
+
+          {comments.length > 0 ? (
+            <div className="space-y-4">
+              {comments.map((comment) => (
+                <CommentItem key={comment.id} comment={comment} />
+              ))}
+            </div>
+          ) : (
+            <Card className="border-gray-700 bg-gray-800">
+              <CardContent className="p-4">
+                <p className="text-center text-gray-400">No comments yet. Be the first to comment!</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
-// The main component that properly unwraps params using React.use()
+// The main component that properly unwraps params
 export default function PostPage({ params }: PageProps) {
-  // Explicitly use React.use to unwrap params before accessing its properties
-  // This follows Next.js latest recommendations
-  const unwrappedParams = React.use(params as any) as { id: string };
-  return <PostPageContent id={unwrappedParams.id} />;
+  return <PostPageContent id={params.id} />;
 }
 
