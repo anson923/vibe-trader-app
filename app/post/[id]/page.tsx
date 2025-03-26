@@ -1027,20 +1027,7 @@ function PostPageContent({ id }: { id: string }) {
                 replies={comment.replies || []}
                 onViewMore={() => toggleCommentExpanded(comment.id)}
               />
-            ) : (
-              // First level replies - show collapsed indicator
-              <button
-                onClick={() => toggleCommentExpanded(comment.id)}
-                className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-300 pl-6 mt-1"
-              >
-                <div className="relative h-5 w-5">
-                  <div className="absolute left-0 top-0 h-full w-0.5 bg-gray-700/50"></div>
-                  <div className="absolute left-0 top-1/2 h-0.5 w-2 bg-gray-700/50"></div>
-                  <Users className="h-3.5 w-3.5 ml-3" />
-                </div>
-                {totalReplies} {totalReplies === 1 ? 'reply' : 'replies'}
-              </button>
-            )}
+            ) : null}
           </div>
         )}
       </div>
